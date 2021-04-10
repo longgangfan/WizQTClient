@@ -1,6 +1,5 @@
 ﻿#include "WizObject.h"
 
-#include "WizXmlRpc.h"
 #include "WizMisc.h"
 #include "utils/WizLogger.h"
 #include "share/jsoncpp/json/json.h"
@@ -8,7 +7,6 @@
 WIZUSERINFO::WIZUSERINFO()
     : nUserLevel(0)
     , nUserPoints(0)
-    , syncType(0)
 {
 }
 
@@ -16,7 +14,6 @@ WIZUSERINFO::WIZUSERINFO(const WIZUSERINFO& info)
 {
     strToken = info.strToken;
     strKbGUID = info.strKbGUID;
-    strXmlRpcServer = info.strXmlRpcServer;
     strKbServer = info.strKbServer;
     nMaxFileSize = info.nMaxFileSize;
     strInviteCode = info.strInviteCode;
@@ -32,7 +29,27 @@ WIZUSERINFO::WIZUSERINFO(const WIZUSERINFO& info)
     strUserType = info.strUserType;
     tVipExpried = info.tVipExpried;
     tCreated = info.tCreated;
-    syncType = info.syncType;
+}
+
+WIZUSERINFO::WIZUSERINFO(const WIZUSERINFO& info, const WIZGROUPDATA& group)
+{
+    strToken = info.strToken;
+    strKbGUID = group.strGroupGUID;    //group
+    strKbServer = group.strKbServer;    //group
+    nMaxFileSize = info.nMaxFileSize;
+    strInviteCode = info.strInviteCode;
+    strMywizEmail = info.strMywizEmail;
+    strNoticeLink = info.strNoticeLink;
+    strNoticeText = info.strNoticeText;
+    strDisplayName = info.strDisplayName;
+    strUserEmail = info.strUserEmail;
+    strUserGUID = info.strUserGUID;
+    nUserLevel = info.nUserLevel;
+    strUserLevelName = info.strUserLevelName;
+    nUserPoints = info.nUserPoints;
+    strUserType = info.strUserType;
+    tVipExpried = info.tVipExpried;
+    tCreated = info.tCreated;
 }
 
 bool WIZUSERINFO::fromJson(const Json::Value& value)
@@ -41,14 +58,12 @@ bool WIZUSERINFO::fromJson(const Json::Value& value)
         strToken = QString::fromStdString(value["token"].asString());
         strKbGUID = QString::fromStdString(value["kbGuid"].asString());
         strKbServer = QString::fromStdString(value["kbServer"].asString());
-        strXmlRpcServer = QString::fromStdString(value["kbXmlRpcServer"].asString());
         strMywizEmail = QString::fromStdString(value["mywizEmail"].asString());
         nUserLevel = value["userLevel"].asInt();
         strUserLevelName = QString::fromStdString(value["userLevelName"].asString());
         nUserPoints = value["userPoints"].asInt();
         strUserType = QString::fromStdString(value["userType"].asString());
         nMaxFileSize = value["uploadSizeLimit"].asInt64();
-        syncType = value["syncType"].asInt();
 
         strInviteCode = QString::fromStdString(value["inviteCode"].asString());
         strNoticeText = QString::fromStdString(value["noticeText"].asString());
@@ -68,8 +83,7 @@ bool WIZUSERINFO::fromJson(const Json::Value& value)
         return !strToken.isEmpty()
                 && !strKbGUID.isEmpty()
                 && !strUserGUID.isEmpty()
-                && !strKbServer.isEmpty()
-                && !strXmlRpcServer.isEmpty();
+                && !strKbServer.isEmpty();
         //
     } catch (Json::Exception& e) {
         TOLOG1("failed to convert json to userinfo: %1", e.what());
@@ -84,16 +98,6 @@ WIZUSERCERT::WIZUSERCERT()
 {
 }
 
-bool WIZUSERCERT::loadFromXmlRpc(WizXmlRpcStructValue& val)
-{
-    WizXmlRpcStructValue& data = val;
-    data.getStr("n", strN);
-    data.getStr("e", stre);
-    data.getStr("d", strd);
-    data.getStr("hint", strHint);
-
-    return true;
-}
 
 WIZKBVALUEVERSIONS::WIZKBVALUEVERSIONS()
     : inited(false)
@@ -109,7 +113,7 @@ bool WIZKBVALUEVERSIONS::fromJson(const Json::Value& value)
         //
         Json::Value versionsVal = value["versions"];
         //
-        for (int i = 0; i < versionsVal.size(); i++)
+        for (int i = 0; i < (int)versionsVal.size(); i++)
         {
             Json::Value version = versionsVal[i];
             //
@@ -176,31 +180,6 @@ bool WIZKBINFO::fromJson(const Json::Value& value)
         return false;
     }
     //
-    return true;
-}
-
-/* -------------------------- WIZOBJECTPARTDATA -------------------------- */
-WIZOBJECTPARTDATA::WIZOBJECTPARTDATA()
-    : nStartPos(0)
-    , nQuerySize(0)
-    , nObjectSize(0)
-    , bEOF(false)
-    , nPartSize(0)
-{
-}
-
-bool WIZOBJECTPARTDATA::loadFromXmlRpc(WizXmlRpcStructValue& data)
-{
-    data.getInt("eof", bEOF);
-    data.getInt64("obj_size", nObjectSize);
-    data.getString("part_md5", strPartMD5);
-    data.getInt64("part_size", nPartSize);
-
-    if (!data.getStream("data", arrayData)){
-        TOLOG("Fault error, data is null!");
-        return false;
-    }
-
     return true;
 }
 
@@ -302,7 +281,7 @@ QString WIZOBJECTDATA::objectTypeToTypeString(WizObjectType eType)
 
 WIZTAGDATA::WIZTAGDATA()
     : nVersion(-1)
-    , nPostion(0)
+    , nPosition(0)
 {
 }
 
@@ -315,7 +294,7 @@ WIZTAGDATA::WIZTAGDATA(const WIZTAGDATA& data)
     strDescription = data.strDescription;
     tModified = data.tModified;
     nVersion = data.nVersion;
-    nPostion = data.nPostion;
+    nPosition = data.nPosition;
 }
 
 BOOL WIZTAGDATA::equalForSync(const WIZTAGDATA& data) const
@@ -336,6 +315,11 @@ bool WIZTAGDATA::fromJson(const Json::Value& value)
         strName = QString::fromStdString(value["name"].asString());
         tModified = QDateTime::fromTime_t(value["modified"].asInt64() / 1000);
         nVersion = value["version"].asInt64();
+        nPosition = value["pos"].asInt64();
+        //
+        if (strName.isEmpty()) {
+            strName = "Unnamed tag";
+        }
 
     } catch (Json::Exception& e) {
         TOLOG(e.what());
@@ -349,11 +333,13 @@ bool WIZTAGDATA::fromJson(const Json::Value& value)
 
 bool WIZTAGDATA::toJson(QString kbGuid, Json::Value& value) const
 {
+    Q_UNUSED(kbGuid);
     //value["kbGuid"] = kbGuid.toStdString();
     value["tagGuid"] = strGUID.toStdString();
     value["parentTagGuid"] = strParentGUID.toStdString();
     value["name"] = strName.toStdString();
     value["modified"] = tModified.toTime_t() * (Json::UInt64)1000;
+    value["pos"] = (int)nPosition;
     //
     return true;
 }
@@ -477,6 +463,8 @@ bool WIZDELETEDGUIDDATA::fromJson(const Json::Value& value)
 
 bool WIZDELETEDGUIDDATA::toJson(QString kbGuid, Json::Value& value) const
 {
+    Q_UNUSED(kbGuid);
+
     value["deletedGuid"] = strGUID.toStdString();
     value["type"] = WIZOBJECTDATA::objectTypeToTypeString(eType).toStdString();
     value["created"] = tDeleted.toTime_t() * (Json::UInt64)1000;
@@ -608,8 +596,12 @@ bool WIZDOCUMENTDATAEX::fromJson(const Json::Value& value)
         strStyleGUID = QString::fromStdString(value["styleGuid"].asString());
         //
         QString tags = QString::fromStdString(value["tags"].asString());
-        QStringList sl = tags.split('*');
-        arrayTagGUID.assign(sl.begin(), sl.end());
+        if (!tags.isEmpty()) {
+            QStringList sl = tags.split('*');
+            if (sl.length() > 0) {
+                arrayTagGUID.assign(sl.begin(), sl.end());
+            }
+        }
         //
         nProtected = value["protected"].asInt();
         nAttachmentCount = value["attachmentCount"].asInt();
@@ -662,6 +654,7 @@ WIZGROUPDATA::WIZGROUPDATA()
 
 WIZGROUPDATA::WIZGROUPDATA(const WIZGROUPDATA& data)
     : bizGUID(data.bizGUID)
+    , strKbServer(data.strKbServer)
     , bizName(data.bizName)
     , tCreated(data.tCreated)
     , tModified(data.tModified)
@@ -686,6 +679,7 @@ bool WIZGROUPDATA::fromJson(const Json::Value& value)
 {
     try {
         //
+        strKbServer = QString::fromStdString(value["kbServer"].asString());
         bizGUID = QString::fromStdString(value["bizGuid"].asString());
         bizName = QString::fromStdString(value["bizName"].asString());
         tCreated = QDateTime::fromTime_t(value["created"].asInt64() / 1000);

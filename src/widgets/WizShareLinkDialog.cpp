@@ -1,7 +1,7 @@
 ﻿#include "WizShareLinkDialog.h"
 #include "sync/WizToken.h"
 #include "utils/WizPathResolve.h"
-#include "utils/WizMisc.h"
+#include "utils/WizMisc_utils.h"
 #include "share/WizSettings.h"
 #include <QVBoxLayout>
 #include <QWebEngineView>
@@ -13,6 +13,7 @@
 #include <QMessageBox>
 #include <QDebug>
 #include "share/WizWebEngineView.h"
+#include "share/WizThreads.h"
 #include "sync/WizApiEntry.h"
 
 #define ShareLinkFirstTips "ShareLinkFirstTips"
@@ -22,7 +23,9 @@ WizShareLinkDialog::WizShareLinkDialog(WizUserSettings& settings, QWidget* paren
     , m_settings(settings)
     , m_view(new WizWebEngineView(this))
 {
-    setWindowFlags(Qt::CustomizeWindowHint);
+    WizWebEngineView::initWebEngineView(m_view, {{"external", this}, {"wizQt", this}});
+    //
+    //setWindowFlags(Qt::CustomizeWindowHint);
     QVBoxLayout* layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->addWidget(m_view);
@@ -30,10 +33,6 @@ WizShareLinkDialog::WizShareLinkDialog(WizUserSettings& settings, QWidget* paren
     m_view->settings()->setAttribute(QWebEngineSettings::LocalStorageEnabled, true);
     m_view->settings()->setAttribute(QWebEngineSettings::LocalContentCanAccessRemoteUrls, true);
     //
-    m_view->addToJavaScriptWindowObject("external", this);
-    //m_view->addToJavaScriptWindowObject("customObject", this);
-
-    m_animation = new QPropertyAnimation(this, "size", this);
 }
 
 WizShareLinkDialog::~WizShareLinkDialog()
@@ -71,6 +70,7 @@ void WizShareLinkDialog::getToken()
     QString strToken = WizToken::token();
     m_view->page()->runJavaScript(QString("setToken('%1')").arg(strToken), [=](const QVariant& vRet){
 
+        Q_UNUSED(vRet);
         emit tokenObtained();
 
     });
@@ -93,6 +93,7 @@ QString WizShareLinkDialog::getTitle()
 
 void WizShareLinkDialog::resizeEx(int nWidth, int nHeight)
 {
+    Q_UNUSED(nWidth);
 //    resize(nWidth, nHeight);
     QRect rec = geometry();
     rec.setHeight(nHeight);
@@ -163,13 +164,43 @@ QString WizShareLinkDialog::formateISO8601String()
     return date.toString(Qt::ISODate);
 }
 
+void WizShareLinkDialog::notifyEvent(const QString& event, const QVariant& params)
+{
+    Q_UNUSED(params);
+    qDebug() << event;
+    if (event == "UpgradeToVip") {
+        //
+        done(100);
+        //close();
+
+    } else if (event == "VerifyMobile") {
+        //
+        done(200);
+        //close();
+        //
+    }
+}
+
+
 void WizShareLinkDialog::loadHtml()
 {
-    QUrlQuery query;
-    query.addQueryItem("share_server", WizCommonApiEntry::shareServer());
-    QString strFile = Utils::WizPathResolve::resourcesPath() + "files/share_link/index.html";
-    QUrl url = QUrl::fromLocalFile(strFile);
-    url.setQuery(query);
-    m_view->load(url);
+    WizExecuteOnThread(WIZ_THREAD_DEFAULT, [=] () {
+        //
+        QString strUrlTemplate = WizCommonApiEntry::shareNoteUrl();
+        QString token = WizToken::token();
+        WizExecuteOnThread(WIZ_THREAD_MAIN, [=](){
+            QString strUrl = strUrlTemplate;
+            strUrl.replace("{kb_guid}", getKbGuid());
+            strUrl.replace("{doc_guid}", getGuid());
+            strUrl.replace("{token}", token);
+            QUrl url = QUrl(strUrl);
+#ifdef QT_DEBUG
+            qDebug() << url;
+#endif
+            m_view->load(url);
+        });
+
+    });
+    //
 }
 

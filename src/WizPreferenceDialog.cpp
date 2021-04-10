@@ -4,6 +4,7 @@
 #include <QMessageBox>
 #include <QFontDialog>
 #include <QColorDialog>
+#include <QListWidget>
 #include <QTimer>
 
 #include "share/WizGlobal.h"
@@ -19,6 +20,9 @@
 #include "sync/WizApiEntry.h"
 
 #include "widgets/WizExecutingActionDialog.h"
+#ifdef Q_OS_MAC
+#include "mac/WizMacHelper.h"
+#endif
 
 
 WizPreferenceWindow::WizPreferenceWindow(WizExplorerApp& app, QWidget* parent)
@@ -26,10 +30,25 @@ WizPreferenceWindow::WizPreferenceWindow(WizExplorerApp& app, QWidget* parent)
     , ui(new Ui::WizPreferenceWindow)
     , m_app(app)
     , m_dbMgr(app.databaseManager())
+    , m_biniting(true)
 {
+    //
+#ifndef Q_OS_MAC
+    if (isDarkMode()) {
+        setStyleSheet("color:#e9e9e9");
+    }
+#endif
+    //
     ui->setupUi(this);
     setWindowIcon(QIcon());
     setWindowTitle(tr("Preference"));
+    //
+#ifdef Q_OS_MAC
+    ui->checkBoxDarkMode->setVisible(false);
+#else
+    ui->checkBoxDarkMode->setChecked(isDarkMode());
+#endif
+
 
     connect(ui->btnClose, SIGNAL(clicked()), SLOT(accept()));
 
@@ -84,6 +103,9 @@ WizPreferenceWindow::WizPreferenceWindow(WizExplorerApp& app, QWidget* parent)
             ui->radioAuto->setChecked(true);
             break;
     }
+    //
+    ui->spellCheck->setChecked(userSettings().isEnableSpellCheck());
+    connect(ui->spellCheck, SIGNAL(toggled(bool)), this, SLOT(on_enableSpellCheck(bool)));
 
     // syncing tab
     int nInterval = userSettings().syncInterval();
@@ -170,7 +192,7 @@ WizPreferenceWindow::WizPreferenceWindow(WizExplorerApp& app, QWidget* parent)
             arg(m_app.userSettings().defaultFontFamily())
             .arg(m_app.userSettings().defaultFontSize());
     ui->editFont->setText(strFont);
-
+    //
     connect(ui->buttonFontSelect, SIGNAL(clicked()), SLOT(onButtonFontSelect_clicked()));
 
     //
@@ -179,19 +201,49 @@ WizPreferenceWindow::WizPreferenceWindow(WizExplorerApp& app, QWidget* parent)
     ui->spinBox_left->setValue(m_app.userSettings().printMarginValue(wizPositionLeft));
     ui->spinBox_right->setValue(m_app.userSettings().printMarginValue(wizPositionRight));
     ui->spinBox_top->setValue(m_app.userSettings().printMarginValue(wizPositionTop));
+    //
+    if (isDarkMode()) {
+        QString darkStyleSheet = QString("background-color:%1").arg(WizColorLineEditorBackground.name());
+        ui->editFont->setStyleSheet(darkStyleSheet);
+        ui->spinBox_bottom->setStyleSheet(darkStyleSheet);
+        ui->spinBox_left->setStyleSheet(darkStyleSheet);
+        ui->spinBox_right->setStyleSheet(darkStyleSheet);
+        ui->spinBox_top->setStyleSheet(darkStyleSheet);
+        //
+    }
+    //
+    ui->comboLineHeight->addItem("1");
+    ui->comboLineHeight->addItem("1.2");
+    ui->comboLineHeight->addItem("1.5");
+    ui->comboLineHeight->addItem("1.7");
+    ui->comboLineHeight->addItem("2.0");
+    ui->comboLineHeight->setCurrentText(m_app.userSettings().editorLineHeight());
+
+    ui->comboParaSpacing->addItem("5");
+    ui->comboParaSpacing->addItem("8");
+    ui->comboParaSpacing->addItem("12");
+    ui->comboParaSpacing->addItem("15");
+    ui->comboParaSpacing->setCurrentText(m_app.userSettings().editorParaSpacing());
+    //
+    ui->tabWidget->setCurrentIndex(0);
 
     QString strColor = m_app.userSettings().editorBackgroundColor();
-    updateEditorBackgroundColor(strColor);
+    if (isDarkMode()) {
+        strColor = WizColorLineEditorBackground.name();
+    }
+    updateEditorBackgroundColor(strColor, false);
 
     bool manuallySortFolders = m_app.userSettings().isManualSortingEnabled();
     ui->checkBoxManuallySort->setChecked(manuallySortFolders);
     //
-    connect(ui->useNewSync, SIGNAL(clicked(bool)), SLOT(useNewSyncClicked(bool)));
-    ui->useNewSync->setChecked(WizToken::userInfo().syncType == 1);
-    if (ui->useNewSync->isChecked())
-    {
-        ui->useNewSync->setEnabled(false);
+#ifdef Q_OS_MAC
+    if (isMojaveOrHigher()) {
+        //
+        ui->checkBoxTrayIcon->setVisible(false);
     }
+#endif
+    //
+    m_biniting = false;
 }
 
 void WizPreferenceWindow::showPrintMarginPage()
@@ -318,6 +370,36 @@ void WizPreferenceWindow::labelProxy_linkActivated(const QString& link)
     }
 }
 
+void WizApplyDarkModeStyles_Mac(QObject* parent)
+{
+    if (isDarkMode()) {
+        for (QObject* child : parent->children()) {
+
+            if (QWidget* childWidget = dynamic_cast<QWidget*>(child)) {
+                //
+                QString className = child->metaObject()->className();
+                //
+                qDebug() << className << childWidget->geometry();
+                //
+                if (QWidget* widget = dynamic_cast<QLabel*>(child)) {
+                    widget->setStyleSheet("color:#a6a6a6;background-color:#333333");
+                } else if (QWidget* widget = dynamic_cast<QLineEdit*>(child)) {
+                    widget->setStyleSheet("color:#a6a6a6;background-color:#333333");
+#ifndef Q_OS_MAC
+                } else if (QWidget* widget = dynamic_cast<QAbstractButton*>(child)) {
+                    widget->setStyleSheet("color:#a6a6a6");
+#endif
+                } else if (className == "QFontListView") {
+                    childWidget->setStyleSheet("color:#a6a6a6;background-color:#333333");
+                }
+            }
+            //
+            WizApplyDarkModeStyles_Mac(child);
+        }
+    }
+}
+
+
 void WizPreferenceWindow::onButtonFontSelect_clicked()
 {
     if (!m_fontDialog) {
@@ -326,6 +408,10 @@ void WizPreferenceWindow::onButtonFontSelect_clicked()
         // FIXME: Qt bugs here https://bugreports.qt-project.org/browse/QTBUG-27415
         // upgrade Qt library to 5.0 should fix this issue
         m_fontDialog->setOptions(QFontDialog::DontUseNativeDialog);
+        //
+        if (isDarkMode()) {
+            WizApplyDarkModeStyles_Mac(m_fontDialog);
+        }
     }
 
     QString strFont = m_app.userSettings().defaultFontFamily();
@@ -377,6 +463,14 @@ void WizPreferenceWindow::on_checkBoxTrayIcon_toggled(bool checked)
     mainWindow->setSystemTrayIconVisible(checked);
 }
 
+#ifndef Q_OS_MAC
+void WizPreferenceWindow::on_checkBoxDarkMode_clicked(bool checked)
+{
+    WizSettings wizSettings(Utils::WizPathResolve::globalSettingsFile());
+    wizSettings.setDarkMode(checked);
+}
+#endif
+
 void WizPreferenceWindow::on_comboBox_unit_currentIndexChanged(int index)
 {
     m_app.userSettings().setPrintMarginUnit(index);
@@ -414,24 +508,32 @@ void WizPreferenceWindow::on_checkBoxSystemStyle_toggled(bool checked)
 void WizPreferenceWindow::on_pushButtonBackgroundColor_clicked()
 {
     QColorDialog dlg;
-    dlg.setCurrentColor(m_app.userSettings().editorBackgroundColor());
+    QString color = m_app.userSettings().editorBackgroundColor();
+    if (!color.isEmpty()) {
+        dlg.setCurrentColor(color);
+    }
     if (dlg.exec() == QDialog::Accepted)
     {
         QString strColor = dlg.currentColor().name();
-        updateEditorBackgroundColor(strColor);
+        updateEditorBackgroundColor(strColor, true);
     }
 }
 
 void WizPreferenceWindow::on_pushButtonClearBackground_clicked()
 {
-    updateEditorBackgroundColor("");
+    updateEditorBackgroundColor("", true);
 }
 
-void WizPreferenceWindow::updateEditorBackgroundColor(const QString& strColorName)
+void WizPreferenceWindow::updateEditorBackgroundColor(const QString& strColorName, bool save)
 {
-    m_app.userSettings().setEditorBackgroundColor(strColorName);
+    if (save) {
+        m_app.userSettings().setEditorBackgroundColor(strColorName);
+    }
+    //
     ui->pushButtonBackgroundColor->setStyleSheet(QString("QPushButton "
-                                                             "{ border: 1px; background: %1; height:20px;} ").arg(strColorName));
+                                                             "{ border: 1px; background: %1; height:%2px;} ")
+                                                 .arg(strColorName)
+                                                 .arg(WizSmartScaleUI(20)));
     ui->pushButtonBackgroundColor->setText(strColorName.isEmpty() ? tr("Click to select color") : QString());
     ui->pushButtonClearBackground->setVisible(!strColorName.isEmpty());
 
@@ -462,6 +564,7 @@ void WizPreferenceWindow::on_comboDownloadAttachments_activated(int index)
 
 void WizPreferenceWindow::on_tabWidget_currentChanged(int index)
 {
+    Q_UNUSED(index);
 //    if (index == 1)
 //    {
 //        setFixedHeight(350);
@@ -474,54 +577,58 @@ void WizPreferenceWindow::on_tabWidget_currentChanged(int index)
 //    }
 }
 
-void WizPreferenceWindow::useNewSyncClicked(bool checked)
+
+void WizPreferenceWindow::on_enableSpellCheck(bool checked)
 {
-    if (checked)
-    {
-        QString message = tr("Before checking, you need to know:\n\nDon't support returning old sync mode;\nWhen used, other client must be updated to the latest version, or can't log in.\n\nDo you want to use?");
-        if (QMessageBox::Yes != WizMessageBox::question(this, message))
-        {
-            ui->useNewSync->setChecked(false);
-            return;
-        }
-
-        //
-        WizExecutingActionDialog::executeAction(tr("Change user settings..."), WIZ_THREAD_NETWORK, [=] {
-            //
-            bool ret = false;
-            QString errorMessage = tr("Network error");
-            //
-            QString asUrl = WizCommonApiEntry::newAsServerUrl();
-            if (!asUrl.isEmpty())
-            {
-                QString url = asUrl + "/as/user/settings/sync_type/1?token=" + WizToken::token();
-                //
-                WIZSTANDARDRESULT result = WizRequest::execStandardJsonRequest(url, "PUT");
-                if (result)  {
-                    ret = true;
-                } else {
-                    errorMessage = result.returnMessage;
-                }
-            }
-            //
-            ::WizExecuteOnThread(WIZ_THREAD_MAIN, [=] {
-                //
-                QTimer::singleShot(300, [=]{
-                    if (ret) {
-                        ui->useNewSync->setEnabled(false);
-                        WizMessageBox::information(this, tr("Succeeded to change user settings, please restart WizNote."));
-                    } else {
-                        WizMessageBox::warning(this, tr("Failed to change user settings:\n\n %1").arg(errorMessage));
-                        ui->useNewSync->setChecked(false);
-                    }
-                });
-                //
-
-            });
-            //
-
-        });
-    }
-
+    userSettings().setEnableSpellCheck(checked);
+    Q_EMIT settingsChanged(wizoptionsSpellCheck);
 }
+
+
+void WizPreferenceWindow::updateEditorLineHeight(const QString& strLineHeight, bool save)
+{
+    if (save) {
+        m_app.userSettings().setEditorLineHeight(strLineHeight);
+    }
+    //
+    Q_EMIT settingsChanged(wizoptionsFont);
+}
+
+void WizPreferenceWindow::on_comboLineHeight_currentIndexChanged(int index)
+{
+    if (m_biniting)
+        return;
+    //
+    QString LineHeight = ui->comboLineHeight->itemText(index);
+    updateEditorLineHeight(LineHeight, true);
+}
+void WizPreferenceWindow::on_btnResetLineHeight_clicked()
+{
+    ui->comboLineHeight->setCurrentText("1.7");
+    updateEditorLineHeight("1.7", true);
+}
+
+
+void WizPreferenceWindow::updateEditorParaSpacing(const QString& spacing, bool save)
+{
+    if (save) {
+        m_app.userSettings().setEditorParaSpacing(spacing);
+    }
+    //
+    Q_EMIT settingsChanged(wizoptionsFont);
+}
+void WizPreferenceWindow::on_comboParaSpacing_currentIndexChanged(int index)
+{
+    if (m_biniting)
+        return;
+    //
+    QString LineHeight = ui->comboParaSpacing->itemText(index);
+    updateEditorParaSpacing(LineHeight, true);
+}
+void WizPreferenceWindow::on_btnResetParaSpacing_clicked()
+{
+    ui->comboParaSpacing->setCurrentText("8");
+    updateEditorParaSpacing("8", true);
+}
+
 

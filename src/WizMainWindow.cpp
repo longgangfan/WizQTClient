@@ -16,6 +16,7 @@
 #include <QPrintDialog>
 #include <QPrinter>
 #include <QCheckBox>
+#include <QStackedWidget>
 
 #ifdef Q_OS_MAC
 #include <Carbon/Carbon.h>
@@ -35,7 +36,6 @@
 #include "WizConsoleDialog.h"
 #include "WizCategoryView.h"
 #include "WizDocumentListView.h"
-#include "WizCertManager.h"
 #include "WizUserCipherForm.h"
 #include "WizDocumentView.h"
 #include "WizTitleBar.h"
@@ -56,7 +56,8 @@
 #include "share/WizObjectDataDownloader.h"
 #include "utils/WizPathResolve.h"
 #include "utils/WizStyleHelper.h"
-#include "utils/WizMisc.h"
+#include "utils/WizMisc_utils.h"
+#include "utils/WizPinyin.h"
 #include "widgets/WizFramelessWebDialog.h"
 #include "widgets/WizScreenShotWidget.h"
 #include "widgets/WizImageButton.h"
@@ -99,6 +100,9 @@
 #include "share/WizWebEngineView.h"
 #include "widgets/WizExecutingActionDialog.h"
 #include "widgets/WizUserServiceExprDialog.h"
+#include "WizSvgEditorDialog.h"
+
+#include "share/jsoncpp/json/json.h"
 
 #define MAINWINDOW  "MainWindow"
 
@@ -112,8 +116,8 @@ WizMainWindow::WizMainWindow(WizDatabaseManager& dbMgr, QWidget *parent)
     : _baseClass(parent, true)
 #endif
     , m_dbMgr(dbMgr)
-    , m_progress(new WizProgressDialog(this))
     , m_settings(new WizUserSettings(dbMgr.db()))
+    , m_progress(new WizProgressDialog(this))
     , m_syncQuick(new WizKMSyncThread(dbMgr.db(), true, this))
     , m_syncFull(new WizKMSyncThread(dbMgr.db(), false, this))
     , m_searcher(new WizSearcher(m_dbMgr, this))
@@ -135,7 +139,6 @@ WizMainWindow::WizMainWindow(WizDatabaseManager& dbMgr, QWidget *parent)
     , m_newNoteButton(NULL)
     #else
     , m_toolBar(new QToolBar(this))
-//    , m_toolBar(nullptr)
     #endif
     , m_useSystemBasedStyle(true)
 #else
@@ -185,14 +188,13 @@ WizMainWindow::WizMainWindow(WizDatabaseManager& dbMgr, QWidget *parent)
     qApp->installEventFilter(this);
 #ifdef Q_OS_MAC
     installEventFilter(this);
-
-    if (systemWidgetBlurAvailable())
-    {
-        setAutoFillBackground(false);
-        setAttribute(Qt::WA_TranslucentBackground, true);
+#else
+    if (isDarkMode()) {
+        setStyleSheet("background-color:#363636");
     }
-
 #endif
+
+
 
     // search and full text search
     m_searcher->start(QThread::HighPriority);
@@ -208,7 +210,7 @@ WizMainWindow::WizMainWindow(WizDatabaseManager& dbMgr, QWidget *parent)
     connect(m_syncFull, SIGNAL(bubbleNotificationRequest(const QVariant&)),
             SLOT(on_bubbleNotification_request(const QVariant&)));
     connect(m_syncFull, SIGNAL(syncStarted(bool)), SLOT(on_syncStarted(bool)));
-    connect(m_syncFull, SIGNAL(syncFinished(int, QString, bool)), SLOT(on_syncDone(int, QString, bool)));
+    connect(m_syncFull, SIGNAL(syncFinished(int, bool, QString, bool)), SLOT(on_syncDone(int, bool, QString, bool)));
 
     connect(m_syncQuick, SIGNAL(promptFreeServiceExpr(WIZGROUPDATA)), SLOT(on_promptFreeServiceExpr(WIZGROUPDATA)));
     connect(m_syncQuick, SIGNAL(promptVipServiceExpr(WIZGROUPDATA)), SLOT(on_promptVipServiceExpr(WIZGROUPDATA)));
@@ -234,7 +236,7 @@ WizMainWindow::WizMainWindow(WizDatabaseManager& dbMgr, QWidget *parent)
             m_doc, SLOT(on_document_data_changed(QString,WizDocumentView*)));
 
     connect(m_doc->titleBar(), SIGNAL(viewNoteInSeparateWindow_request()), SLOT(viewCurrentNoteInSeparateWindow()));
-
+    //
 #if QT_VERSION > 0x050400
     connect(&m_dbMgr, &WizDatabaseManager::userIdChanged, [](const QString& oldId, const QString& newId){
         WizAvatarHost::deleteAvatar(oldId);
@@ -294,6 +296,54 @@ WizMainWindow::WizMainWindow(WizDatabaseManager& dbMgr, QWidget *parent)
         syncMessageTimer->setInterval(3 * 1000 * 60);
         syncMessageTimer->start(3 * 1000 * 60);
     }
+    //
+    applyTheme();
+}
+
+void WizMainWindow::applyTheme()
+{
+    m_category->applyTheme();
+    m_documents->applyTheme();
+    m_msgList->applyTheme();
+    m_doc->applyTheme();
+    m_msgListTitleBar->applyTheme();
+    //
+    QPalette pal = m_noteListWidget->palette();
+    if (isDarkMode()) {
+        pal.setColor(QPalette::Window, QColor("#272727"));
+        pal.setColor(QPalette::Base, QColor("#272727"));
+
+    } else {
+        pal.setColor(QPalette::Window, QColor("#F5F5F5"));
+        pal.setColor(QPalette::Base, QColor("#F5F5F5"));
+    }
+    m_noteListWidget->setPalette(pal);
+    //
+    if (isDarkMode()) {
+        m_noteButtonsContainer->setStyleSheet("background-color:#333333");
+    } else {
+        m_noteButtonsContainer->setStyleSheet("background-color:#f5f5f5");
+    }
+    //
+    if (isDarkMode()) {
+        m_notelistHeaderSep->setStyleSheet("border-top-width:1;border-top-style:solid;border-top-color:#474747");
+        m_messagelistHeaderSep->setStyleSheet("border-top-width:1;border-top-style:solid;border-top-color:#474747");
+    } else {
+        m_notelistHeaderSep->setStyleSheet("border-top-width:1;border-top-style:solid;border-top-color:#DADAD9");
+        m_messagelistHeaderSep->setStyleSheet("border-top-width:1;border-top-style:solid;border-top-color:#DADAD9");
+    }
+    //
+    //message list
+    pal = m_msgListWidget->palette();
+    if (isDarkMode()) {
+        pal.setColor(QPalette::Window, QColor("#272727"));
+        pal.setColor(QPalette::Base, QColor("#272727"));
+    } else {
+        pal.setColor(QPalette::Window, QColor("#F5F5F5"));
+        pal.setColor(QPalette::Base, QColor("#F5F5F5"));
+    }
+    m_msgListWidget->setPalette(pal);
+    m_msgListWidget->setAutoFillBackground(true);
 }
 
 bool WizMainWindow::eventFilter(QObject* watched, QEvent* event)
@@ -355,9 +405,11 @@ bool WizMainWindow::eventFilter(QObject* watched, QEvent* event)
 
                 if (!(oldState & Qt::WindowFullScreen) && (windowState() & Qt::WindowFullScreen))
                 {
-                    //NOTE:全屏时隐藏搜索提示
-                    m_searchWidget->hideCompleter();
-                    m_searchWidget->setCompleterUsable(false);
+                    if (m_searchWidget) {
+                        //NOTE:全屏时隐藏搜索提示
+                        m_searchWidget->hideCompleter();
+                        m_searchWidget->setCompleterUsable(false);
+                    }
                 }
             }
         }
@@ -377,6 +429,7 @@ void WizMainWindow::on_application_aboutToQuit()
 void WizMainWindow::cleanOnQuit()
 {
     m_quiting = true;
+    qInstallMessageHandler(nullptr);
     //
     WizObjectDownloaderHost::instance()->waitForDone();
     WizKMSyncThread::setQuickThread(NULL);
@@ -531,22 +584,6 @@ void WizMainWindow::keyPressEvent(QKeyEvent* ev)
     _baseClass::keyPressEvent(ev);
 }
 
-
-#ifdef Q_OS_MAC
-void WizMainWindow::paintEvent(QPaintEvent*event)
-{
-    if (systemWidgetBlurAvailable())
-    {
-        QPainter pt(this);
-
-        pt.setCompositionMode( QPainter::CompositionMode_Clear );
-        pt.fillRect(rect(), Qt::SolidPattern );
-    }
-
-    QMainWindow::paintEvent(event);
-}
-#endif
-
 #ifdef USECOCOATOOLBAR
 void WizMainWindow::showEvent(QShowEvent* event)
 {
@@ -615,7 +652,7 @@ void WizMainWindow::on_checkUpgrade_finished(bool bUpgradeAvaliable)
     QString strUrl = WizUpgradeChecker::getWhatsNewUrl();
     WizUpgradeNotifyDialog notifyDialog(strUrl, this);
     if (QDialog::Accepted == notifyDialog.exec()) {
-        QString url = WizApiEntry::standardCommandUrl("link");
+        QString url = WizOfficialApiEntry::standardCommandUrl("link");
 #if defined(Q_OS_MAC)
         url += "&name=wiznote-mac.html";
 #elif defined(Q_OS_LINUX)
@@ -678,10 +715,20 @@ void WizMainWindow::on_quickSync_request(const QString& strKbGUID)
 
 void WizMainWindow::setSystemTrayIconVisible(bool bVisible)
 {
-//        //
+#ifdef Q_OS_MAC
+    if (isMojaveOrHigher()) {
+        //在某些用户系统上面会导致崩溃
+        return;
+    }
+#endif
+    //
     if (!m_tray)
     {
+#ifdef Q_OS_MAC
+        m_tray = new WizTrayIcon(*this, this);
+#else
         m_tray = new WizTrayIcon(*this, QApplication::windowIcon(), this);
+#endif
         initTrayIcon(m_tray);
         m_tray->show();
     }
@@ -720,6 +767,29 @@ void WizMainWindow::on_viewMessage_request(qint64 messageID)
     WizCategoryViewMessageItem* pItem = dynamic_cast<WizCategoryViewMessageItem*>(pBase);
     showMessageList(pItem);
     m_msgList->selectMessage(messageID);
+}
+
+
+void WizMainWindow::on_viewMessage_requestNormal(QVariant messageData)
+{
+    if (messageData.type() == QVariant::Bool)
+    {
+        QString strUrl = WizOfficialApiEntry::standardCommandUrl("link");
+        if (!strUrl.startsWith("http")) {
+            return;
+        }
+        strUrl = strUrl + "&site=wiznote";
+        strUrl += "&name=mac-sync-error-solution";
+        QDesktopServices::openUrl(QUrl(strUrl));
+    }
+    else if (messageData.type() == QVariant::Int)
+    {
+        if (WIZKM_XMLRPC_ERROR_VIP_SERVICE_EXPR == messageData
+                || WIZKM_XMLRPC_ERROR_FREE_SERVICE_EXPR == messageData)
+        {
+            showVipUpgradePage();
+        }
+    }
 }
 
 void WizMainWindow::on_viewMessage_request(const WIZMESSAGEDATA& msg)
@@ -895,6 +965,7 @@ void WizMainWindow::on_upgradeThread_finished()
 
 WizMainWindow::~WizMainWindow()
 {
+    disconnect();
     delete m_history;
 }
 
@@ -903,6 +974,7 @@ void WizMainWindow::saveStatus()
     QSettings* settings = WizGlobal::globalSettings();
     settings->setValue("Window/Geometry", saveGeometry());
     settings->setValue("Window/Splitter", m_splitter->saveState());
+    settings->setValue("Window/SubSplitter", m_subSplitter->saveState());
 }
 
 void WizMainWindow::restoreStatus()
@@ -910,6 +982,7 @@ void WizMainWindow::restoreStatus()
     QSettings* settings = WizGlobal::globalSettings();
     QByteArray geometry = settings->value("Window/Geometry").toByteArray();
     QByteArray splitterState = settings->value("Window/Splitter").toByteArray();
+    QByteArray subSplitterState = settings->value("Window/SubSplitter").toByteArray();
     // main window
     if (geometry.isEmpty()) {
 
@@ -929,17 +1002,20 @@ void WizMainWindow::restoreStatus()
 
     restoreGeometry(geometry);
     m_splitter->restoreState(splitterState);
+    m_subSplitter->restoreState(subSplitterState);
 }
 
 void WizMainWindow::initActions()
 {
-#ifdef Q_OS_LINUX
+#ifndef Q_OS_MAC
     m_actions->init(!m_useSystemBasedStyle);
+    QSize iconSize = QSize(WizSmartScaleUI(16), WizSmartScaleUI(16));
 #else
     m_actions->init();
+    QSize iconSize = QSize(WizSmartScaleUI(32), WizSmartScaleUI(32));
 #endif
     m_animateSync->setAction(m_actions->actionFromName(WIZACTION_GLOBAL_SYNC));
-    m_animateSync->setSingleIcons("sync");
+    m_animateSync->setSingleIcons("sync", iconSize);
     //
     connect(m_actions, SIGNAL(insertTableSelected(int,int)), SLOT(on_actionMenuFormatInsertTable(int,int)));
 
@@ -977,6 +1053,7 @@ void WizMainWindow::initMenuBar()
     m_actions->actionFromName(WIZCATEGORY_OPTION_TAGS)->setCheckable(true);
     m_actions->actionFromName(WIZCATEGORY_OPTION_BIZGROUPS)->setCheckable(true);
     m_actions->actionFromName(WIZCATEGORY_OPTION_PERSONALGROUPS)->setCheckable(true);
+    m_actions->actionFromName(WIZACTION_GLOBAL_SHOW_SUB_FOLDER_DOCUMENTS)->setCheckable(true);
 
     bool checked = m_category->isSectionVisible(Section_MessageCenter);
     m_actions->actionFromName(WIZCATEGORY_OPTION_MESSAGECENTER)->setChecked(checked);
@@ -993,7 +1070,8 @@ void WizMainWindow::initMenuBar()
     m_actions->actionFromName(WIZCATEGORY_OPTION_BIZGROUPS)->setChecked(checked);
     checked = m_category->isSectionVisible(Section_PersonalGroups);
     m_actions->actionFromName(WIZCATEGORY_OPTION_PERSONALGROUPS)->setChecked(checked);
-
+    checked = userSettings().showSubFolderDocuments();
+    m_actions->actionFromName(WIZACTION_GLOBAL_SHOW_SUB_FOLDER_DOCUMENTS)->setChecked(checked);
     //
     m_viewTypeActions = new QActionGroup(m_menuBar);
     QAction* action = m_actions->actionFromName(WIZCATEGORY_OPTION_THUMBNAILVIEW);
@@ -1046,7 +1124,7 @@ void WizMainWindow::initDockMenu()
 {
 #ifdef Q_OS_MAC
     m_dockMenu = new QMenu(this);
-    qt_mac_set_dock_menu(m_dockMenu);
+    m_dockMenu->setAsDockMenu();
 
     connect(m_dockMenu, SIGNAL(aboutToShow()),
             SLOT(resetDockMenu()));
@@ -1055,13 +1133,13 @@ void WizMainWindow::initDockMenu()
 
 void WizMainWindow::on_editor_statusChanged(const QString& currentStyle)
 {
+    Q_UNUSED(currentStyle);
 }
 
 void WizMainWindow::createNoteByTemplate(const TemplateData& tmplData)
 {
     QFileInfo info(tmplData.strFileName);
-    if (info.exists())
-    {
+    if (info.exists() || tmplData.type == BuildInTemplate) {
         createNoteByTemplateCore(tmplData);
     }
     else
@@ -1104,6 +1182,7 @@ void WizMainWindow::createNoteByTemplateCore(const TemplateData& tmplData)
     //
     WIZDOCUMENTDATA data;
     data.strKbGUID = kbGUID;
+    data.strType = tmplData.buildInName;
     //
     data.strTitle = tmplData.strTitle.isEmpty() ? info.completeBaseName() : tmplData.strTitle;
     //  Journal {date}({week})
@@ -1151,6 +1230,13 @@ void WizMainWindow::createNoteByTemplateCore(const TemplateData& tmplData)
     if (!noteManager.createNoteByTemplate(data, currTag, tmplData.strFileName))
         return;
     //
+    bool isHandwriting = false;
+    if (data.strType == "svgpainter") {
+        //
+        isHandwriting = true;
+        createHandwritingNote(m_dbMgr, data, this);
+    }
+    //
     setFocusForNewNote(data);
     //
     locateDocument(data);
@@ -1163,7 +1249,8 @@ void WizMainWindow::createNoteByTemplateCore(const TemplateData& tmplData)
     }
     else
     {
-        viewDocument(data, true);
+        bool addToHistory = true;
+        viewDocument(data, addToHistory);
     }
 
     quickSyncKb(kbGUID);
@@ -1243,7 +1330,15 @@ void WizMainWindow::on_shareDocumentByLink_request(const QString& strKbGUID, con
 
     WizShareLinkDialog dlg(userSettings());
     dlg.shareDocument(doc);
-    dlg.exec();
+    int result = dlg.exec();
+    qDebug() << result;
+    if (result == 100) {
+        //upgrade vip
+        showVipUpgradePage();
+    } else if (result == 200) {
+        //mobile
+        m_userInfoWidget->showAccountSettings();
+    }
 }
 
 void WizMainWindow::openVipPageInWebBrowser()
@@ -1309,22 +1404,7 @@ bool caseInsensitiveLessThan(QAction* action1, QAction* action2) {
     const QString k1 = action1->text().toLower();
     const QString k2 = action2->text().toLower();
 
-    static bool isSimpChinese = Utils::WizMisc::isChinese();
-    if (isSimpChinese)
-    {
-        if (QTextCodec* pCodec = QTextCodec::codecForName("GBK"))
-        {
-            QByteArray arrThis = pCodec->fromUnicode(k1);
-            QByteArray arrOther = pCodec->fromUnicode(k2);
-            //
-            std::string strThisA(arrThis.data(), arrThis.size());
-            std::string strOtherA(arrOther.data(), arrOther.size());
-            //
-            return strThisA.compare(strOtherA.c_str()) < 0;
-        }
-    }
-    //
-    return  k1.compare(k2) < 0;
+    return WizToolsSmartCompare(k1, k2) < 0;
 }
 
 
@@ -1368,7 +1448,7 @@ void WizMainWindow::resetWindowListMenu(QMenu* menu, bool removeExists)
         newActions.append(action);
     }
 
-    qSort(newActions.begin(), newActions.end(), caseInsensitiveLessThan);
+    std::sort(newActions.begin(), newActions.end(), caseInsensitiveLessThan);
     for (QAction* action : newActions)
     {
         connect(action, SIGNAL(triggered()), SLOT(on_dockMenuAction_triggered()));
@@ -1434,11 +1514,12 @@ void WizMainWindow::removeWindowsMenuItem(QString guid)
 void WizMainWindow::showVipUpgradePage()
 {
 #ifndef BUILD4APPSTORE
-        WizExecuteOnThread(WIZ_THREAD_NETWORK, [](){
+        WizExecuteOnThread(WIZ_THREAD_NETWORK, [=](){
             QString strToken = WizToken::token();
-            QString strUrl = WizApiEntry::standardCommandUrl("vip", strToken);
+            QString strUrl = WizCommonApiEntry::makeUpUrlFromCommand("vip", strToken);
+            qDebug() << strUrl;
             WizExecuteOnThread(WIZ_THREAD_MAIN, [=](){
-                QDesktopServices::openUrl(QUrl(strUrl));
+                WizShowWebDialogWithToken(tr("Account settings"), strUrl, this);
             });
         });
 #else
@@ -1462,6 +1543,8 @@ void WizMainWindow::showTemplateIAPDlg(const TemplateData& tmpl)
     }
     m_templateIAPDialog->showTemplateInfo(tmpl.id, tmpl.strName, tmpl.strThumbUrl);
     m_templateIAPDialog->open();
+#else
+    Q_UNUSED(tmpl);
 #endif
 }
 
@@ -1618,6 +1701,73 @@ void WizMainWindow::copyLink(const QString& link)
     Utils::WizMisc::copyTextToClipboard(link);
 }
 
+void WizMainWindow::onClickedImage(const QString& src, const QString& list)
+{
+
+    Json::Value d;
+    Json::Reader reader;
+    if (reader.parse(list.toUtf8().constData(), d))
+    {
+        CWizStdStringArray files;
+        if (d.isArray())
+        {
+            for (int i = 0; i < (int)d.size(); i++)
+            {
+                QString file = QString::fromStdString(d[i].asString());
+                files.push_back(file);
+            }
+        }
+        //
+        if (!files.empty())
+        {
+            files.insert(files.begin(), src);
+            //
+            CWizStdStringArray sl;
+            sl.push_back("open");
+            sl.push_back("-a");
+            sl.push_back("Preview");
+            //
+            QString workingPath;
+            //
+            for (auto it = files.begin(); it != files.end(); it++)
+            {
+                QString fileUrl = *it;
+                QUrl url(fileUrl);
+                QString path = url.toLocalFile();
+                //
+                if (workingPath.isEmpty())
+                {
+                    workingPath = Utils::WizMisc::extractFilePath(path);
+                }
+                else
+                {
+                    QString currentPath = Utils::WizMisc::extractFilePath(path);
+                    if (currentPath != workingPath)
+                    {
+                        continue;
+                    }
+                }
+                //
+                QString fileName = Utils::WizMisc::extractFileName(path);
+                sl.push_back("\"" + fileName + "\"");
+            }
+            //
+            CString commandLine;
+            WizStringArrayToText(sl, commandLine, " ");
+            //
+            QProcess* process = new QProcess(this);
+            process->setWorkingDirectory(workingPath);
+            process->start(commandLine);
+            //
+            return;
+        }
+    }
+    //
+
+    QUrl url = QUrl(src);
+    QDesktopServices::openUrl(url);
+}
+
 #ifndef Q_OS_MAC
 void WizMainWindow::layoutTitleBar()
 {
@@ -1676,7 +1826,11 @@ void WizMainWindow::layoutTitleBar()
     //
     QLabel* label = new QLabel(this);
     label->setFixedHeight(1);
-    label->setStyleSheet(QString("QLabel{background-color:#aeaeae; border: none;}"));
+    if (isDarkMode()) {
+        label->setStyleSheet(QString("QLabel{background-color:#000000; border: none;}"));
+    } else {
+        label->setStyleSheet(QString("QLabel{background-color:#aeaeae; border: none;}"));
+    }
 
     layout->addItem(layoutTitle);
     layout->addWidget(label);
@@ -1694,9 +1848,14 @@ void WizMainWindow::initMenuList()
 void WizMainWindow::initToolBar()
 {
 #ifdef Q_OS_MAC
-    #ifdef USECOCOATOOLBAR
-    m_toolBar->showInWindow(this);
-
+    //reset mac toolbar icons
+    QString skin = userSettings().skin();
+    QSize size = QSize(32, 32);
+    const WizIconOptions ICON_OPTIONS = WizIconOptions(Qt::transparent, "#a6a6a6", Qt::transparent);
+    m_actions->actionFromName(WIZACTION_GLOBAL_SYNC)->setIcon(::WizLoadSkinIcon(skin, WIZACTION_GLOBAL_SYNC, size, ICON_OPTIONS));
+    m_actions->actionFromName(WIZACTION_GLOBAL_GOBACK)->setIcon(::WizLoadSkinIcon(skin, WIZACTION_GLOBAL_GOBACK, size, ICON_OPTIONS));
+    m_actions->actionFromName(WIZACTION_GLOBAL_GOFORWARD)->setIcon(::WizLoadSkinIcon(skin, WIZACTION_GLOBAL_GOFORWARD, size, ICON_OPTIONS));
+    //
     m_actions->actionFromName(WIZACTION_GLOBAL_GOBACK)->setEnabled(false);
     m_actions->actionFromName(WIZACTION_GLOBAL_GOFORWARD)->setEnabled(false);
     m_toolBar->addAction(m_actions->actionFromName(WIZACTION_GLOBAL_GOBACK));
@@ -1711,7 +1870,10 @@ void WizMainWindow::initToolBar()
 
     int buttonWidth = WizIsChineseLanguage(userSettings().locale()) ? 116 : 124;
     //WARNING:不能创建使用toolbar作为父类对象，会造成输入法偏移
-    QPixmap pixExtraMenu = Utils::WizStyleHelper::skinResourceFileName("actionNewNoteExtraMenu", true);
+    QPixmap pixExtraMenu = Utils::WizStyleHelper::loadPixmap("actionNewNoteExtraMenu");
+    if (isDarkMode()) {
+        pixExtraMenu = qpixmapWithTintColor(pixExtraMenu, QColor("#ffffff"));
+    }
     WizMacToolBarButtonItem* newNoteItem = new WizMacToolBarButtonItem(tr("New Note"), pixExtraMenu, buttonWidth, nullptr);
     connect(newNoteItem, SIGNAL(triggered(bool)),
             m_actions->actionFromName(WIZACTION_GLOBAL_NEW_DOCUMENT), SIGNAL(triggered(bool)));
@@ -1724,56 +1886,24 @@ void WizMainWindow::initToolBar()
 
     m_toolBar->addStandardItem(WizMacToolBar::FlexibleSpace);
 
-    WizUserInfoWidget* info = new WizUserInfoWidget(*this, nullptr);
-    m_toolBar->addWidget(info, "", "");
+    m_userInfoWidget = new WizUserInfoWidget(*this, nullptr);
+    m_toolBar->addWidget(m_userInfoWidget, "", "");
     //
     m_searchWidget = m_toolBar->getSearchWidget();
-    m_searchWidget->setUserSettings(m_settings);
-    m_searchWidget->setPopupWgtOffset(m_searchWidget->sizeHint().width(), QSize(isHighPix ? 217 : 230, 0));
-    #else
-
-
-//    return;
-
-
-//    setUnifiedTitleAndToolBarOnMac(true);
-    setContextMenuPolicy(Qt::NoContextMenu);
-    addToolBar(m_toolBar);
-    m_toolBar->setAllowedAreas(Qt::TopToolBarArea);
-    m_toolBar->setMovable(false);
-
-    m_toolBar->addWidget(new WizFixedSpacer(QSize(10, 1), m_toolBar));
-
-    WizUserInfoWidget* info = new WizUserInfoWidget(*this, m_toolBar);
-    m_toolBar->addWidget(info);
-
-    m_toolBar->addWidget(new WizFixedSpacer(QSize(20, 1), m_toolBar));
-
-    m_toolBar->addAction(m_actions->actionFromName(WIZACTION_GLOBAL_SYNC));
-    m_toolBar->addAction(m_actions->actionFromName(WIZACTION_GLOBAL_NEW_DOCUMENT));
-
-    //m_toolBar->addWidget(new CWizSpacer(m_toolBar));
-    m_spacerForToolButtonAdjust = new WizFixedSpacer(QSize(20, 1), m_toolBar);
-    m_toolBar->addWidget(m_spacerForToolButtonAdjust);
-
-    m_toolBar->addAction(m_actions->actionFromName(WIZACTION_GLOBAL_GOBACK));
-    m_toolBar->addAction(m_actions->actionFromName(WIZACTION_GLOBAL_GOFORWARD));
-    updateHistoryButtonStatus();
-
-    m_toolBar->addWidget(new WizSpacer(m_toolBar));
-
-    m_searchWidget = new WizSearchView(this);
-    m_searchWidget->setWidthHint(280);
-    m_toolBar->addWidget(m_searchWidget);
-
-    m_toolBar->addWidget(new WizFixedSpacer(QSize(20, 1), m_toolBar));
-    m_toolBar->setStyleSheet("QToolBar{background-color:#fcfcfc;}");
-    #endif
-
+    if (m_searchWidget) {
+        m_searchWidget->setUserSettings(m_settings);
+    }
+    //
+    m_toolBar->showInWindow(this);
+    //
 #else
     layoutTitleBar();
     //
-    QSize iconSize = QSize(WizSmartScaleUI(24), WizSmartScaleUI(24));
+    if (isDarkMode()) {
+        m_toolBar->setStyleSheet("background-color:#363636");
+    }
+    //
+    QSize iconSize = QSize(WizSmartScaleUI(16), WizSmartScaleUI(16));
     m_toolBar->setIconSize(iconSize);
     m_toolBar->setContextMenuPolicy(Qt::PreventContextMenu);
     m_toolBar->setMovable(false);
@@ -1815,15 +1945,23 @@ void WizMainWindow::initToolBar()
     //
     QToolButton* buttonNew = new QToolButton(m_toolBar);
     buttonNew->setMenu(m_newNoteExtraMenu);
-    buttonNew->setDefaultAction(newNoteAction);//m_newNoteExtraMenu->actionAt(QPoint(0 ,0)));
+    buttonNew->setDefaultAction(newNoteAction);
     buttonNew->setPopupMode(QToolButton::MenuButtonPopup);
-    //buttonNew->setAction(newNoteAction);
+    //
+    QString strIconPath = ::WizGetSkinResourcePath(userSettings().skin()) + "arrow.png";
+    QString newButtonStyleSheet = QString("QToolButton{border:%1px solid transparent;padding-right:%2px;}"
+                                          "QToolButton::menu-button{border:%1px solid transparent;}"
+                                          "QToolButton::menu-arrow{image: url(%3)}")
+            .arg(WizSmartScaleUI(2))
+            .arg(WizSmartScaleUI(16))
+            .arg(strIconPath);
+    buttonNew->setStyleSheet(newButtonStyleSheet);
     m_toolBar->addWidget(buttonNew);
     //
     m_toolBar->addWidget(new WizSpacer(m_toolBar));
 
-    WizUserInfoWidget* info = new WizUserInfoWidget(*this, m_toolBar);
-    m_toolBar->addWidget(info);
+    m_userInfoWidget = new WizUserInfoWidget(*this, m_toolBar);
+    m_toolBar->addWidget(m_userInfoWidget);
 
     updateHistoryButtonStatus();
 
@@ -1840,17 +1978,6 @@ void WizMainWindow::initClient()
     m_clienWgt = new QWidget(this);
     setCentralWidget(m_clienWgt);
 
-    if (systemWidgetBlurAvailable())
-    {
-        enableWidgetBehindBlur(m_clienWgt);
-    }
-    else
-    {
-        QPalette pal = m_doc->palette();
-        pal.setColor(QPalette::Window, QColor("#F6F6F6"));
-        m_doc->setPalette(pal);
-    }
-
 #else
     setCentralWidget(rootWidget());
     //
@@ -1865,6 +1992,7 @@ void WizMainWindow::initClient()
     QPalette pal = m_clienWgt->palette();
     pal.setColor(QPalette::Window, QColor(Qt::transparent));
     pal.setColor(QPalette::Base, QColor(Qt::transparent));
+
     m_clienWgt->setPalette(pal);
     m_clienWgt->setAutoFillBackground(true);
 
@@ -1873,8 +2001,8 @@ void WizMainWindow::initClient()
     layout->setSpacing(0);
     m_clienWgt->setLayout(layout);
 
-    m_splitter = std::make_shared<WizSplitter>();
-    layout->addWidget(m_splitter.get());
+    m_splitter = new WizSplitter();
+    layout->addWidget(m_splitter);
 
     pal.setColor(QPalette::Window, Utils::WizStyleHelper::treeViewBackground());
     m_category->setPalette(pal);
@@ -1905,11 +2033,31 @@ void WizMainWindow::initClient()
     layoutList->addWidget(createNoteListView());
     layoutList->addWidget(createMessageListView());
     m_docListContainer->setLayout(layoutList);
-    m_splitter->addWidget(m_docListContainer);
-    m_splitter->addWidget(documentPanel);
+    //
+    WizSplitter* subSplitter = new WizSplitter(m_splitter);
+    subSplitter->addWidget(m_docListContainer);
+    subSplitter->addWidget(documentPanel);
+    subSplitter->setStretchFactor(0, 0);
+    subSplitter->setStretchFactor(1, 1);
+    m_subSplitter = subSplitter;
+    //
+    WizWebEngineView* webView = new WizWebEngineView(m_splitter);
+    m_mainWebView = webView;
+    //
+    QStackedWidget* subContainer = new QStackedWidget(m_splitter);
+    subContainer->addWidget(subSplitter);
+    subContainer->addWidget(webView);
+    m_subContainer = subContainer;
+    //
+    m_splitter->addWidget(subContainer);
     m_splitter->setStretchFactor(0, 0);
-    m_splitter->setStretchFactor(1, 0);
-    m_splitter->setStretchFactor(2, 1);
+    m_splitter->setStretchFactor(1, 1);
+    //
+//    m_splitter->addWidget(m_docListContainer);
+//    m_splitter->addWidget(documentPanel);
+//    m_splitter->setStretchFactor(0, 0);
+//    m_splitter->setStretchFactor(1, 0);
+//    m_splitter->setStretchFactor(2, 1);
 
     // set minimum width
     bool isHighPix = WizIsHighPixel();
@@ -1920,13 +2068,9 @@ void WizMainWindow::initClient()
     m_doc->commentWidget()->setMinimumWidth(isHighPix ? 170 : 195);
     m_doc->web()->setMinimumWidth(576);
 
-    m_doc->setStyleSheet(QString("QLineEdit{border:1px solid #DDDDDD; border-radius:2px;}"
-                                 "QToolButton {border:0px; padding:0px; border-radius:0px;}"));
-    m_doc->titleBar()->setStyleSheet(QString("QLineEdit{padding:0px; padding-left:-2px; padding-bottom:1px; border:0px; border-radius:0px;}"));
-
     m_msgListWidget->hide();
     //
-    connect(m_splitter.get(), SIGNAL(splitterMoved(int, int)), SLOT(on_client_splitterMoved(int, int)));
+    connect(m_splitter, SIGNAL(splitterMoved(int, int)), SLOT(on_client_splitterMoved(int, int)));
 }
 
 QWidget* WizMainWindow::createNoteListView()
@@ -1935,12 +2079,19 @@ QWidget* WizMainWindow::createNoteListView()
     m_noteListWidget->setMinimumWidth(100);
     QVBoxLayout* layoutList = new QVBoxLayout();
     layoutList->setContentsMargins(0, 0, 0, 0);
+    layoutList->setMargin(0);
     layoutList->setSpacing(0);
     m_noteListWidget->setLayout(layoutList);
-//    m_noteListWidget->setStyleSheet("background-color:#F5F5F5;");
+    //
     QPalette pal = m_noteListWidget->palette();
-    pal.setColor(QPalette::Window, QColor("#F5F5F5"));
-    pal.setColor(QPalette::Base, QColor("#F5F5F5"));
+    if (isDarkMode()) {
+        pal.setColor(QPalette::Window, QColor("#272727"));
+        pal.setColor(QPalette::Base, QColor("#272727"));
+
+    } else {
+        pal.setColor(QPalette::Window, QColor("#F5F5F5"));
+        pal.setColor(QPalette::Base, QColor("#F5F5F5"));
+    }
     m_noteListWidget->setPalette(pal);
     m_noteListWidget->setAutoFillBackground(true);
 
@@ -1949,69 +2100,67 @@ QWidget* WizMainWindow::createNoteListView()
     QHBoxLayout* layoutButtonContainer = new QHBoxLayout();
     layoutButtonContainer->setContentsMargins(0, 0, 0, 0);
     layoutButtonContainer->setSpacing(0);
+    layoutButtonContainer->setMargin(0);
     noteButtonsContainer->setLayout(layoutButtonContainer);
-
-    QHBoxLayout* layoutActions = new QHBoxLayout();
-    layoutActions->setContentsMargins(0, 0, 12, 0);
-    layoutActions->setSpacing(0);
+    if (isDarkMode()) {
+        noteButtonsContainer->setStyleSheet("background-color:#333333");
+    }
+    m_noteButtonsContainer = noteButtonsContainer;
 
     WizViewTypePopupButton* viewBtn = new WizViewTypePopupButton(*this, this);
     viewBtn->setFixedHeight(Utils::WizStyleHelper::listViewSortControlWidgetHeight());
     connect(viewBtn, SIGNAL(viewTypeChanged(int)), SLOT(on_documents_viewTypeChanged(int)));
     connect(this, SIGNAL(documentsViewTypeChanged(int)), viewBtn, SLOT(on_viewTypeChanged(int)));
-    layoutActions->addWidget(viewBtn);
+    layoutButtonContainer->addWidget(viewBtn);
 
     WizSortingPopupButton* sortBtn = new WizSortingPopupButton(*this, this);
     sortBtn->setFixedHeight(Utils::WizStyleHelper::listViewSortControlWidgetHeight());
     connect(sortBtn, SIGNAL(sortingTypeChanged(int)), SLOT(on_documents_sortingTypeChanged(int)));
     connect(this, SIGNAL(documentsSortTypeChanged(int)), sortBtn, SLOT(on_sortingTypeChanged(int)));
-    layoutActions->addWidget(sortBtn);
-    layoutActions->addStretch(0);
+    layoutButtonContainer->addWidget(sortBtn);
+    //
+    layoutButtonContainer->addStretch(0);
 
     m_labelDocumentsHint = new QLabel(this);
+    m_labelDocumentsHint->setWordWrap(false);
     m_labelDocumentsHint->setText(tr("Unread documents"));
     m_labelDocumentsHint->setStyleSheet("color: #A7A7A7; font-size:14px; padding-top:2px; margin-right:6px;"); //font: 12px;
-    layoutActions->addWidget(m_labelDocumentsHint);
-//    connect(m_category, SIGNAL(documentsHint(const QString&)), SLOT(on_documents_hintChanged(const QString&)));
-
-//    m_labelDocumentsCount = new QLabel("", this);
-//    m_labelDocumentsCount->setMargin(5);
-//    layoutActions->addWidget(m_labelDocumentsCount);
-//    connect(m_documents, SIGNAL(documentCountChanged()), SLOT(on_documents_documentCountChanged()));
+    layoutButtonContainer->addWidget(m_labelDocumentsHint);
     connect(m_documents, SIGNAL(changeUploadRequest(QString)), SLOT(on_quickSync_request(QString)));
-
-
-//    //sortBtn->setStyleSheet("padding-top:10px;");
-//    m_labelDocumentsCount->setStyleSheet("color: #787878;padding-bottom:1px;"); //font: 12px;
-//    m_btnMarkDocumentsReaded->setVisible(false);
-//    m_labelDocumentsHint->setVisible(false);
-
-    m_btnMarkDocumentsReaded = new WizImageButton(this);
+    //
+    //如果不用widget包着image button，会导致layout上面增加margin
+    QWidget* readContainer = new QWidget(this);
+    readContainer->setFixedSize(QSize(WizSmartScaleUI(16), WizSmartScaleUI(16)));
+    m_btnMarkDocumentsReaded = new WizImageButton(readContainer);
     QIcon btnIcon = ::WizLoadSkinIcon(Utils::WizStyleHelper::themeName(), "actionMarkMessagesRead");
     m_btnMarkDocumentsReaded->setIcon(btnIcon);
-    m_btnMarkDocumentsReaded->setFixedSize(QSize(18, 18));
+    m_btnMarkDocumentsReaded->setFixedSize(QSize(WizSmartScaleUI(16), WizSmartScaleUI(16)));
     m_btnMarkDocumentsReaded->setToolTip(tr("Mark all documents read"));
     connect(m_btnMarkDocumentsReaded, SIGNAL(clicked()), SLOT(on_btnMarkDocumentsRead_triggered()));
-    layoutActions->addWidget(m_btnMarkDocumentsReaded);
+    layoutButtonContainer->addWidget(readContainer);
+    layoutButtonContainer->addSpacing(12);
 
     m_labelDocumentsHint->setVisible(false);
     m_btnMarkDocumentsReaded->setVisible(false);
 
-    layoutButtonContainer->addLayout(layoutActions);
-
-    QWidget* wgtRightBorder = new QWidget(this);
-    wgtRightBorder->setFixedWidth(13);
-    wgtRightBorder->setFixedHeight(::WizSmartScaleUI(30));
-    wgtRightBorder->setStyleSheet(QString("border-left:1px solid #E7E7E7;"));
-    layoutButtonContainer->addWidget(wgtRightBorder);
-
     QWidget* line2 = new QWidget(this);
     line2->setFixedHeight(1);
-    line2->setStyleSheet("margin-right:12px; border-top-width:1;border-top-style:solid;border-top-color:#DADAD9");
+    if (isDarkMode()) {
+        line2->setStyleSheet("border-top-width:1;border-top-style:solid;border-top-color:#474747");
+    } else {
+        line2->setStyleSheet("border-top-width:1;border-top-style:solid;border-top-color:#DADAD9");
+    }
+    m_notelistHeaderSep = line2;
 
     layoutList->addWidget(noteButtonsContainer);
     layoutList->addWidget(line2);
     layoutList->addWidget(m_documents);
+    //
+#ifndef Q_OS_MAC
+    if (isDarkMode()) {
+        m_documents->setStyleSheet("background-color:#272727");
+    }
+#endif
 
     return m_noteListWidget;
 }
@@ -2024,11 +2173,6 @@ QWidget*WizMainWindow::createMessageListView()
     layoutList->setContentsMargins(0, 0, 0, 0);
     layoutList->setSpacing(0);
     m_msgListWidget->setLayout(layoutList);
-    QPalette pal = m_msgListWidget->palette();
-    pal.setColor(QPalette::Window, QColor("#F5F5F5"));
-    pal.setColor(QPalette::Base, QColor("#F5F5F5"));
-    m_msgListWidget->setPalette(pal);
-    m_msgListWidget->setAutoFillBackground(true);
 
     m_msgListTitleBar = new WizMessageListTitleBar(*this, this);
     connect(m_msgListTitleBar, SIGNAL(messageSelector_senderSelected(QString)),
@@ -2042,19 +2186,14 @@ QWidget*WizMainWindow::createMessageListView()
     titleBarLayout->setSpacing(0);
     titleBarLayout->addWidget(m_msgListTitleBar);
 
-    QWidget* placeHoldWgt = new QWidget(this);
-    placeHoldWgt->setFixedSize(13, WizSmartScaleUI(20));
-    placeHoldWgt->setStyleSheet("border-left:1px solid #E7E7E7;");
-    QHBoxLayout* layout2 = new QHBoxLayout();
-    layout2->setContentsMargins(0, 0, 0, 0);
-    layout2->setSpacing(0);
-    layout2->addWidget(placeHoldWgt);
-    titleBarLayout->addLayout(layout2);
-
-
     QWidget* line2 = new QWidget(this);
     line2->setFixedHeight(1);
-    line2->setStyleSheet("margin-right:12px; border-top-width:1;border-top-style:solid;border-top-color:#DADAD9");
+    if (isDarkMode()) {
+        line2->setStyleSheet("border-top-width:1;border-top-style:solid;border-top-color:#474747");
+    } else {
+        line2->setStyleSheet("border-top-width:1;border-top-style:solid;border-top-color:#DADAD9");
+    }
+    m_messagelistHeaderSep = line2;
 
     layoutList->addLayout(titleBarLayout);
     layoutList->addWidget(line2);
@@ -2241,9 +2380,10 @@ void WizMainWindow::on_syncStarted(bool syncAll)
     }
 }
 
-void WizMainWindow::on_syncDone(int nErrorCode, const QString& strErrorMsg, bool isBackground)
+void WizMainWindow::on_syncDone(int nErrorCode, bool isNetworkError, const QString& strErrorMsg, bool isBackground)
 {
     m_animateSync->stopPlay();
+    //
 
     //
     if (isXMLRpcErrorCodeRelatedWithUserAccount(nErrorCode))
@@ -2262,10 +2402,107 @@ void WizMainWindow::on_syncDone(int nErrorCode, const QString& strErrorMsg, bool
         //当用户的企业付费到期并且有待上传的内容的时候，进行弹框提示
         WizMessageBox::information(this, tr("Info"), strErrorMsg);
     }
+    else
+    {
+        QSystemTrayIcon::MessageIcon icon = QSystemTrayIcon::Critical;
+        int delay = 30 * 1000;
+        QVariant param(isNetworkError);
+
+        if (isNetworkError) {
+            if (m_tray) {
+                m_tray->showMessage(tr("Sync failed"), tr("Bad network connection, can not sync now. Please try again later. (code: %1)").arg(nErrorCode), icon, delay, param);
+            }
+            return;
+        } else {
+            //
+            QString message = tr("There is something wrong with sync service. Please try again later. (code: %1)").arg(nErrorCode);
+            if (WIZKM_XMLRPC_ERROR_VIP_SERVICE_EXPR == nErrorCode) {
+                message = QObject::tr("VIP service of has expired, please renew to VIP.");
+                param = QVariant((int)nErrorCode);
+            } else if (WIZKM_XMLRPC_ERROR_FREE_SERVICE_EXPR == nErrorCode) {
+                message = QObject::tr("User service of has expired, please upgrade to VIP.");
+                param = QVariant((int)nErrorCode);
+            } else if (WIZKM_XMLRPC_ERROR_BIZ_SERVICE_EXPR == nErrorCode) {
+                message = WizFormatString0(QObject::tr("Your {p} business service has expired."));
+            } else if (WIZKM_XMLRPC_ERROR_NOTE_COUNT_LIMIT == nErrorCode) {
+                message = WizFormatString0(QObject::tr("Group notes count limit exceeded!"));
+            }
+            //
+            if (m_tray) {
+                m_tray->showMessage(tr("Sync failed"), message, icon, delay, param);
+            }
+            return;
+        }
+    }
+    //
 
     m_documents->viewport()->update();
     m_category->updateGroupsData();
     m_category->viewport()->update();
+    //
+    refreshAd();
+}
+
+void WizMainWindow::refreshAd()
+{
+    QString url = WizCommonApiEntry::makeUpUrlFromCommand("ad");
+    ::WizExecuteOnThread(WIZ_THREAD_DEFAULT, [=] {
+        //
+        QByteArray data;
+        if (WizURLDownloadToData(url, data)) {
+            //
+            Json::Value d;
+            Json::Reader reader;
+            if (reader.parse(data.constData(), d)) {
+                //
+                if (d.isObject()) {
+                    //
+                    try {
+                        //
+                        QString name = QString::fromUtf8(d["adName"].asString().c_str());
+                        if (name.isEmpty()) {
+                            return;
+                        }
+                        //
+                        if (m_dbMgr.db().getMetaDef("ad",  name) != "1") {
+                            //
+                            QString start = QString::fromUtf8(d["start"].asString().c_str());
+                            QString end = QString::fromUtf8(d["end"].asString().c_str());
+                            WizOleDateTime s = ::WizStringToDateTime(start);
+                            WizOleDateTime e = ::WizStringToDateTime(end);
+                            //
+                            WizOleDateTime now = ::WizGetCurrentTime();
+                            if (now >= s && now <= e) {
+                                //
+                                m_dbMgr.db().setMeta("ad", name, "1");
+                                //
+                                QString link = QString::fromUtf8(d["link"].asString().c_str());
+                                QString title = QString::fromUtf8(d["title"].asString().c_str());
+                                QString strToken = WizToken::token();
+                                link.replace("{token}", strToken);
+                                //
+                                ::WizExecuteOnThread(WIZ_THREAD_MAIN, [=] {
+                                    WizShowWebDialogWithTokenDelayed(title, link, this);
+                                });
+                            }
+                            //
+                            //
+                        }
+                        //
+
+                    } catch (...) {
+
+                    }
+                    //
+                }
+
+                //
+            }
+            //
+        }
+        //
+
+    });
 }
 
 void WizMainWindow::on_syncDone_userVerified()
@@ -2347,7 +2584,9 @@ void WizMainWindow::on_promptVipServiceExpr(WIZGROUPDATA group)
 
 void WizMainWindow::on_bubbleNotification_request(const QVariant& param)
 {
-    m_tray->showMessage(param);
+    if (m_tray) {
+        m_tray->showMessage(param);
+    }
 }
 
 void WizMainWindow::on_actionNewNote_triggered()
@@ -2496,6 +2735,16 @@ void WizMainWindow::on_actionViewToggleCategory_triggered()
     }
 
     m_actions->toggleActionText(WIZACTION_GLOBAL_TOGGLE_CATEGORY);
+}
+
+void WizMainWindow::on_actionViewShowSubFolderDocuments_triggered()
+{
+    bool show = !userSettings().showSubFolderDocuments();
+    userSettings().setShowSubFolderDocuments(show);
+    on_category_itemSelectionChanged();
+    //
+    actions()->actionFromName(WIZACTION_GLOBAL_SHOW_SUB_FOLDER_DOCUMENTS)->setChecked(show);
+    //
 }
 
 void WizMainWindow::on_actionViewToggleFullscreen_triggered()
@@ -2930,7 +3179,7 @@ void WizMainWindow::on_actionPreference_triggered()
 
 void WizMainWindow::on_actionFeedback_triggered()
 {
-    QString strUrl = WizApiEntry::standardCommandUrl("feedback");
+    QString strUrl = WizOfficialApiEntry::standardCommandUrl("feedback");
 
     if (strUrl.isEmpty())
         return;
@@ -2947,7 +3196,7 @@ void WizMainWindow::on_actionFeedback_triggered()
 
 void WizMainWindow::on_actionSupport_triggered()
 {
-    QString strUrl = WizApiEntry::standardCommandUrl("support");
+    QString strUrl = WizOfficialApiEntry::standardCommandUrl("support");
 
     if (strUrl.isEmpty())
         return;
@@ -2959,7 +3208,7 @@ void WizMainWindow::on_actionSupport_triggered()
 
 void WizMainWindow::on_actionManual_triggered()
 {
-    QString strUrl = WizApiEntry::standardCommandUrl("link");
+    QString strUrl = WizOfficialApiEntry::standardCommandUrl("link");
 
     if (strUrl.isEmpty())
         return;
@@ -2972,7 +3221,9 @@ void WizMainWindow::on_actionManual_triggered()
 
 void WizMainWindow::on_actionSearch_triggered()
 {
-    m_searchWidget->focus();
+    if (m_searchWidget) {
+        m_searchWidget->focus();
+    }
 
     WizGetAnalyzer().logAction("MenuBarSearch");
 }
@@ -2980,14 +3231,18 @@ void WizMainWindow::on_actionSearch_triggered()
 void WizMainWindow::resetSearchStatus()
 {
     quitSearchStatus();
-    m_searchWidget->clear();
+    if (m_searchWidget) {
+        m_searchWidget->clear();
+    }
     m_category->restoreSelection();
 }
 
 void WizMainWindow::on_actionResetSearch_triggered()
 {
     resetSearchStatus();
-    m_searchWidget->focus();
+    if (m_searchWidget) {
+        m_searchWidget->focus();
+    }
     //
     WizGetAnalyzer().logAction("MenuBarResetSearch");
 }
@@ -3011,16 +3266,19 @@ void WizMainWindow::on_actionSaveAsHtml_triggered()
 {
     if (WizDocumentWebView* editor = getActiveEditor())
     {
-        QString strPath = QFileDialog::getExistingDirectory(0, tr("Open Directory"),
-                                                           QDir::homePath(),
-                                                            QFileDialog::ShowDirsOnly
-                                                            | QFileDialog::DontResolveSymlinks);
-        if (!strPath.isEmpty())
-        {
-            editor->saveAsHtml(strPath + "/");
-        }
+        editor->saveAsHtml();
     }
     WizGetAnalyzer().logAction("MenuBarSaveAsHtml");
+}
+
+
+void WizMainWindow::on_actionSaveAsMarkdown_triggered()
+{
+    if (WizDocumentWebView* editor = getActiveEditor())
+    {
+        editor->saveAsMarkdown();
+    }
+    WizGetAnalyzer().logAction("MenuBarSaveAsMarkdown");
 }
 
 void WizMainWindow::on_actionImportFile_triggered()
@@ -3053,7 +3311,9 @@ void WizMainWindow::on_search_doSearch(const QString& keywords)
     m_category->saveSelection();
     //
     QString kbGuid = m_category->storedSelectedItemKbGuid();
-    m_searchWidget->setCurrentKb(kbGuid);
+    if (m_searchWidget) {
+        m_searchWidget->setCurrentKb(kbGuid);
+    }
     //
     m_strSearchKeywords = keywords;
     if (keywords.isEmpty()) {
@@ -3095,6 +3355,9 @@ void WizMainWindow::on_search_doSearch(const QString& keywords)
 
 void WizMainWindow::on_searchProcess(const QString& strKeywords, const CWizDocumentDataArray& arrayDocument, bool bStart, bool bEnd)
 {
+    Q_UNUSED(strKeywords);
+    Q_UNUSED(bEnd);
+    //
     if (bStart) {
         m_documents->setLeadInfoState(DocumentLeadInfo_SearchResult);
         m_documents->setDocuments(arrayDocument);
@@ -3135,6 +3398,8 @@ void WizMainWindow::on_menuButtonClicked()
 
 void WizMainWindow::on_client_splitterMoved(int pos, int index)
 {
+    Q_UNUSED(pos);
+    Q_UNUSED(index);
 #ifndef Q_OS_MAC
     adjustToolBarLayout();
 #endif
@@ -3192,9 +3457,9 @@ void WizMainWindow::on_actionGoForward_triggered()
     m_doc->setFocus();
 }
 
-void WizMainWindow::on_category_itemSelectionChanged()
+void WizMainWindow::processCategoryItemChanged()
 {
-    WizCategoryBaseView* category = qobject_cast<WizCategoryBaseView *>(sender());
+    WizCategoryBaseView* category = m_category;
     if (!category)
         return;
     quitSearchStatus();
@@ -3206,7 +3471,12 @@ void WizMainWindow::on_category_itemSelectionChanged()
         return;
 
     static QTime lastTime(0, 0, 0);
-    QTreeWidgetItem *currentItem = category->currentItem();
+    WizCategoryViewItemBase *currentItem = category->currentCategoryItem<WizCategoryViewItemBase>();
+    //
+    if (!currentItem->isWebView()) {
+        m_subContainer->setCurrentIndex(0);
+    }
+    //
     static QTreeWidgetItem *oldItem = currentItem;
     QTime last = lastTime;
     QTime now = QTime::currentTime();
@@ -3215,6 +3485,12 @@ void WizMainWindow::on_category_itemSelectionChanged()
         return;
     } else {
         oldItem = currentItem;
+    }
+    //
+    if (WizCategoryViewTrashItem* pItem = dynamic_cast<WizCategoryViewTrashItem *>(currentItem))
+    {
+        showTrash();
+        return;
     }
 
     QTreeWidgetItem* categoryItem = category->currentItem();
@@ -3229,6 +3505,11 @@ void WizMainWindow::on_category_itemSelectionChanged()
             m_syncFull->quickDownloadMesages();
             WizGetAnalyzer().logAction("categoryMessageRootSelected");
         }
+    }
+        break;
+    case Category_MySharesItem:
+    {
+        showSharedNotes();
     }
         break;
     case Category_ShortcutItem:
@@ -3267,9 +3548,52 @@ void WizMainWindow::on_category_itemSelectionChanged()
     }
     //
     QString kbGuid = m_category->selectedItemKbGUID();
-    m_searchWidget->setCurrentKb(kbGuid);
+    if (m_searchWidget) {
+        m_searchWidget->setCurrentKb(kbGuid);
+    }
+}
+void WizMainWindow::on_category_itemSelectionChanged()
+{
+    processCategoryItemChanged();
+    if (!m_category->selectedItems().isEmpty()) {
+        m_category->clearStoredSelection();
+    }
 }
 
+void WizMainWindow::showTrash()
+{
+    ::WizGetAnalyzer().logAction("categoryMenuRecovery");
+    WizCategoryViewTrashItem* trashItem = m_category->currentCategoryItem<WizCategoryViewTrashItem>();
+    if (trashItem)
+    {
+        WizExecuteOnThread(WIZ_THREAD_NETWORK, [=](){
+            QString strToken = WizToken::token();
+            QString* strUrl = new QString(WizCommonApiEntry::makeUpUrlFromCommand("deleted_recovery", strToken, "&kb_guid=" + trashItem->kbGUID()));
+            WizExecuteOnThread(WIZ_THREAD_MAIN, [=](){
+                m_subContainer->setCurrentIndex(1);
+                m_mainWebView->load(*strUrl);
+                delete strUrl;
+            });
+        });
+    }
+}
+
+void WizMainWindow::showSharedNotes()
+{
+    ::WizGetAnalyzer().logAction("categoryMenuSharedNotes");
+    WizExecuteOnThread(WIZ_THREAD_NETWORK, [=](){
+        QString strToken = WizToken::token();
+        QString strUrl = WizCommonApiEntry::getUrlByCommand("share_list");
+        strUrl = strUrl.replace("{token}", strToken);
+        WizExecuteOnThread(WIZ_THREAD_MAIN, [=](){
+            //
+            m_subContainer->setCurrentIndex(1);
+            m_mainWebView->load(strUrl);
+            //
+            //WizShowWebDialogWithToken(tr("Shared Notes"), strUrl, 0, QSize(800, 480), true);
+        });
+    });
+}
 void WizMainWindow::on_documents_itemSelectionChanged()
 {
     CWizDocumentDataArray arrayDocument;
@@ -3326,6 +3650,9 @@ void WizMainWindow::on_options_settingsChanged(WizOptionsType type)
     case wizoptionsFolders:
         m_category->sortItems(0, Qt::AscendingOrder);
         break;
+    case wizoptionsSpellCheck:
+        m_doc->web()->editorResetSpellCheck();
+        break;
     default:
         break;
     }
@@ -3339,8 +3666,10 @@ void WizMainWindow::on_options_restartForSettings()
 
 void WizMainWindow::resetPermission(const QString& strKbGUID, const QString& strOwner)
 {
+    Q_UNUSED(strOwner);
+
     int nPerm = m_dbMgr.db(strKbGUID).permission();
-    bool isGroup = m_dbMgr.db().kbGUID() != strKbGUID;
+    //bool isGroup = m_dbMgr.db().kbGUID() != strKbGUID;
 
     // Admin, Super, do anything
     if (nPerm == WIZ_USERGROUP_ADMIN || nPerm == WIZ_USERGROUP_SUPER)
@@ -3420,7 +3749,16 @@ void WizMainWindow::viewDocument(const WIZDOCUMENTDATAEX& data, bool addToHistor
     if (addToHistory) {
         m_history->addHistory(data);
     }
+    //
+    m_actions->actionFromName(WIZACTION_GLOBAL_SAVE_AS_MARKDOWN)->setEnabled(WizIsMarkdownNote(data));
+    //
 }
+
+void WizMainWindow::titleChanged()
+{
+    m_actions->actionFromName(WIZACTION_GLOBAL_SAVE_AS_MARKDOWN)->setEnabled(WizIsMarkdownNote(m_doc->note()));
+}
+
 
 void WizMainWindow::locateDocument(const WIZDOCUMENTDATA& data)
 {
@@ -3560,6 +3898,11 @@ QObject* WizMainWindow::DatabaseManager()
     return &m_dbMgr;
 }
 
+QObject* WizMainWindow::CurrentDocumentBrowserObject()
+{
+    return m_doc->web();
+}
+
 QObject* WizMainWindow::CreateWizObject(const QString& strObjectID)
 {
     CString str(strObjectID);
@@ -3574,6 +3917,7 @@ QObject* WizMainWindow::CreateWizObject(const QString& strObjectID)
 
 void WizMainWindow::SetSavingDocument(bool saving)
 {
+    Q_UNUSED(saving);
 }
 
 void WizMainWindow::ProcessClipboardBeforePaste(const QVariantMap& data)
@@ -3639,7 +3983,9 @@ void WizMainWindow::reconnectServer()
 
 void WizMainWindow::setFocusForNewNote(WIZDOCUMENTDATA doc)
 {
-    m_documentForEditing = doc;
+    if (doc.strType != "svgpainter") {
+        m_documentForEditing = doc;
+    }
     m_documents->addAndSelectDocument(doc);
     m_documents->clearFocus();
     m_doc->web()->setFocus(Qt::MouseFocusReason);
@@ -3748,7 +4094,7 @@ void WizMainWindow::showNewFeatureGuide()
 #ifdef Q_OS_WIN
     return;
 #else
-    QString strUrl = WizApiEntry::standardCommandUrl("link");
+    QString strUrl = WizOfficialApiEntry::standardCommandUrl("link");
     strUrl = strUrl + "&site=" + (m_settings->locale() == WizGetDefaultTranslatedLocal() ? "wiznote" : "blog" );
     strUrl += "&name=newfeature-mac.html";
 
@@ -3762,7 +4108,7 @@ void WizMainWindow::showMobileFileReceiverUserGuide()
 #ifdef Q_OS_WIN
     return;
 #else
-    QString strUrl = WizApiEntry::standardCommandUrl("link");
+    QString strUrl = WizOfficialApiEntry::standardCommandUrl("link");
     strUrl = strUrl + "&site=" + (m_settings->locale() == WizGetDefaultTranslatedLocal() ? "wiznote" : "blog" );
     strUrl += "&name=guidemap_sendimage.html";
     qInfo() <<"open dialog with url : " << strUrl;
@@ -3781,6 +4127,7 @@ void WizMainWindow::setDoNotShowMobileFileReceiverUserGuideAgain(bool bNotAgain)
 
 void WizMainWindow::initTrayIcon(QSystemTrayIcon* trayIcon)
 {
+    //
     Q_ASSERT(trayIcon);
     m_trayMenu = new QMenu(this);
     QAction* actionShow = m_trayMenu->addAction(tr("Show/Hide MainWindow"));
@@ -3789,7 +4136,6 @@ void WizMainWindow::initTrayIcon(QSystemTrayIcon* trayIcon)
     QAction* actionNewNote = m_trayMenu->addAction(tr("New Note"));
     connect(actionNewNote, SIGNAL(triggered()), SLOT(on_trayIcon_newDocument_clicked()));
 
-    //
     m_trayMenu->addSeparator();
     QAction* actionHideTrayIcon = m_trayMenu->addAction(tr("Hide TrayIcon"));
     connect(actionHideTrayIcon, SIGNAL(triggered()), SLOT(on_hideTrayIcon_clicked()));
@@ -3802,14 +4148,17 @@ void WizMainWindow::initTrayIcon(QSystemTrayIcon* trayIcon)
 
     connect(m_tray, SIGNAL(viewMessageRequest(qint64)),
             SLOT(on_viewMessage_request(qint64)));
+    connect(m_tray, SIGNAL(viewMessageRequestNormal(QVariant)),
+            SLOT(on_viewMessage_requestNormal(QVariant)));
     //
     //
     trayIcon->setContextMenu(m_trayMenu);
+    //
 #ifdef Q_OS_MAC
     QString normal = WizGetSkinResourceFileName(userSettings().skin(), "trayIcon");
     QString selected = WizGetSkinResourceFileName(userSettings().skin(), "trayIcon_selected");
     QIcon icon;
-    icon.setIsMask(true);
+    //icon.setIsMask(true);
     icon.addFile(normal, QSize(), QIcon::Normal, QIcon::Off);
     icon.addFile(selected, QSize(), QIcon::Selected, QIcon::Off);
     if (!icon.isNull())
@@ -3882,8 +4231,11 @@ void WizMainWindow::quitSearchStatus()
     // 如果当前是搜索模式，在退出搜索模式时清除搜索框中的内容
     if (m_documents->acceptAllSearchItems())
     {
-        m_searchWidget->clear();
-        m_searchWidget->clearFocus();
+        if (m_searchWidget) {
+            m_searchWidget->clear();
+            m_searchWidget->clearFocus();
+        }
+        //
         m_strSearchKeywords.clear();
     }
 
@@ -4208,5 +4560,11 @@ void WizMainWindow::setNeedResetGroups()
 }
 
 
-
+void WizMainWindow::onThemeChanged()
+{
+    applyTheme();
+    m_searchWidget->applyTheme();
+    //
+    emit themeChanged();
+}
 

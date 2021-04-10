@@ -44,7 +44,6 @@ public:
     Q_INVOKABLE void Delete();
     Q_INVOKABLE void PermanentlyDelete(void);
     Q_INVOKABLE void moveTo(QObject* pFolder);
-    Q_INVOKABLE bool UpdateDocument4(const QString& strHtml, const QString& strURL, int nFlags);
     Q_INVOKABLE void deleteToTrash();   // would delete from server
     Q_INVOKABLE void deleteFromTrash();   // delete local file
 
@@ -117,7 +116,6 @@ private:
 
     bool m_bIsPersonal;
     QMap<QString, WizDatabase*> m_mapGroups;
-    QMutex m_mtxTempFile;
 
 private:
     QMutex m_mutexCache;
@@ -297,6 +295,7 @@ public:
     void setDownloadAttachmentsAtSync(bool download);
     bool getDownloadAttachmentsAtSync();
     bool isFolderExists(const QString& folder);
+    bool isFolderExists(const QString& folder, QString& exists);
     QString getFolders();
     QString getFoldersPos();
     QString getGroupTagsPos();
@@ -316,7 +315,7 @@ public:
     virtual bool deleteAttachmentFromLocal(const QString& strAttachmentGuid);
 
 public:
-    bool open(const QString& strAccountFolderName, const QString& strKbGUID = NULL);
+    virtual bool open(const QString& strAccountFolderName, const QString& strKbGUID = NULL);
     bool loadDatabaseInfo();
     bool setDatabaseInfo(const WIZDATABASEINFO& dbInfo);
     bool initDatabaseInfo(const WIZDATABASEINFO& dbInfo);
@@ -368,6 +367,8 @@ public:
     bool getBizData(const QString& bizGUID, WIZBIZDATA& biz);
     bool getBizGuid(const QString& strGroupGUID, QString& strBizGUID);
     bool getGroupData(const QString& groupGUID, WIZGROUPDATA& group);
+    QString getKbServer(const QString &kbGuid);
+
     //
     static bool isEmptyBiz(const CWizGroupDataArray& arrayGroup, const QString& bizGUID);
     static bool getOwnGroups(const CWizGroupDataArray& arrayAllGroup, CWizGroupDataArray& arrayOwnGroup);
@@ -390,7 +391,7 @@ public:
     bool setDocumentFlags(const QString& strDocumentGuid, const QString& strFlags);
 
     bool updateDocumentData(WIZDOCUMENTDATA& data, const QString& strHtml,
-                            const QString& strURL, int nFlags, bool notifyDataModify = true);
+                            const QString& strURL, int nFlags, const QString& images, bool notifyDataModify = true);
     bool updateDocumentDataWithFolder(WIZDOCUMENTDATA& data, const QString& strFolder,
                                           bool notifyDataModify = true);
     void clearUnusedImages(const QString& strHtml, const QString& strFilePath);
@@ -477,14 +478,14 @@ public:
                                 QString& strFullPathFileName);
     bool documentToHtmlFile(const WIZDOCUMENTDATA& document, \
                             const QString& strPath);
-    bool exportToHtmlFile(const WIZDOCUMENTDATA& document, \
-                            const QString& strPath);
+    bool exportToHtmlFile(const WIZDOCUMENTDATA& document,
+                          const QString& strIndexFileName);
 
     bool extractZiwFileToFolder(const WIZDOCUMENTDATA& document, const QString& strFolder);
     bool encryptDocument(WIZDOCUMENTDATA& document);
-    bool compressFolderToZiwFile(WIZDOCUMENTDATA& document, const QString& strFileFoler);
+    bool compressFolderToZiwFile(WIZDOCUMENTDATA& document, const QString& strFileFolder);
     bool compressFolderToZiwFile(WIZDOCUMENTDATA& document, \
-                                const QString& strFileFoler, const QString& strZiwFileName);
+                                const QString& strFileFolder, const QString& strZiwFileName);
     bool cancelDocumentEncryption(WIZDOCUMENTDATA& document);
 
     bool isFileAccessible(const WIZDOCUMENTDATA& document);
@@ -555,6 +556,16 @@ private:
 };
 
 
+class WizDocumentDataLocker
+{
+    QMutex* m_mutex;
+#ifdef QT_DEBUG
+    QString m_docGuid;
+#endif
+public:
+    WizDocumentDataLocker(QString docGuid);
+    ~WizDocumentDataLocker();
+};
 
 #define WIZNOTE_MIMEFORMAT_TAGS             "wiznote/tags"
 #define WIZNOTE_MIMEFORMAT_DOCUMENTS        "wiznote/documents"

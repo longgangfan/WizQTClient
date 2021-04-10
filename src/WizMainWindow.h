@@ -22,6 +22,7 @@ class QLabel;
 class QSystemTrayIcon;
 class QComboBox;
 class QActionGroup;
+class QStackedWidget;
 struct TemplateData;
 
 class WizProgressDialog;
@@ -37,9 +38,11 @@ class WizAnimateAction;
 class WizOptionsWidget;
 class WizIAPDialog;
 class WizTemplatePurchaseDialog;
+class WizWebEngineView;
 
 class WizSearchView;
 class WizSearcher;
+class WizUserInfoWidget;
 
 class QtSegmentControl;
 class WizObjectDownloaderHost;
@@ -126,18 +129,14 @@ protected:
     void moveEvent(QMoveEvent* ev);
     void keyPressEvent(QKeyEvent* ev);
 
-#ifdef Q_OS_MAC
-    virtual void paintEvent(QPaintEvent* event);
-#endif
-
 #ifdef USECOCOATOOLBAR
     virtual void showEvent(QShowEvent *event);
 #endif
 
 private:
     WizDatabaseManager& m_dbMgr;
-    WizProgressDialog* m_progress;
     WizUserSettings* m_settings;
+    WizProgressDialog* m_progress;
     WizKMSyncThread* m_syncFull;
     WizKMSyncThread* m_syncQuick;
     WizUserVerifyDialog* m_userVerifyDialog;
@@ -186,12 +185,18 @@ private:
     WizDocumentListView* m_documents;
     WizMessageListView* m_msgList;
     QWidget* m_noteListWidget;
+    QWidget* m_noteButtonsContainer;
+    QWidget* m_notelistHeaderSep;
+    QWidget* m_messagelistHeaderSep;
     QWidget* m_msgListWidget;
     WizMessageListTitleBar* m_msgListTitleBar;
 
     WizDocumentSelectionView* m_documentSelection;
     WizDocumentView* m_doc;
-    std::shared_ptr<WizSplitter> m_splitter;
+    WizSplitter* m_splitter;
+    WizSplitter* m_subSplitter;
+    QStackedWidget* m_subContainer;
+    WizWebEngineView* m_mainWebView;
     QWidget* m_docListContainer;
     WizSingleDocumentViewDelegate* m_singleViewDelegate;
 
@@ -206,6 +211,7 @@ private:
     QString m_strSearchKeywords;
 
     WizSearchView* m_searchWidget;
+    WizUserInfoWidget* m_userInfoWidget;
 
     WizMobileFileReceiver *m_mobileFileReceiver;    
 
@@ -240,6 +246,7 @@ public:
     QSize clientSize() const { return m_splitter->widget(2)->size(); }
     QWidget* client() const;
     WizDocumentView* documentView() const;
+    WizDocumentListView* documentList() const { return m_documents; }
     WizKMSyncThread* fullSync() const { return m_syncFull; }
     WizKMSyncThread* quickSync() const { return m_syncQuick; }
     void quickSyncKb(const QString& kbGuid);
@@ -266,9 +273,20 @@ public:
     void createNoteWithText(const QString& strText);
 
     void createNoteByTemplateCore(const TemplateData& tmplData);
+    //
+    void refreshAd();
+    //
+    void showTrash();
+    void showSharedNotes(); 
+    //
+    void processCategoryItemChanged();
+    //
+    void applyTheme();
+    //
 signals:
     void documentsViewTypeChanged(int);
     void documentsSortTypeChanged(int);
+    void themeChanged();
 
 public Q_SLOTS:
     void on_actionExit_triggered();
@@ -289,6 +307,7 @@ public Q_SLOTS:
     void on_actionFindReplace_triggered();
     void on_actionSaveAsPDF_triggered();
     void on_actionSaveAsHtml_triggered();
+    void on_actionSaveAsMarkdown_triggered();
     void on_actionImportFile_triggered();
     void on_actionPrintMargin_triggered();
 
@@ -305,6 +324,7 @@ public Q_SLOTS:
 
     // menu view
     void on_actionViewToggleCategory_triggered();
+    void on_actionViewShowSubFolderDocuments_triggered();
     void on_actionViewToggleFullscreen_triggered();
     void on_actionViewMinimize_triggered();
     void on_actionZoom_triggered();
@@ -379,7 +399,7 @@ public Q_SLOTS:
 
     void on_syncLogined();
     void on_syncStarted(bool syncAll);
-    void on_syncDone(int nErrorcode, const QString& strErrorMsg, bool isBackground);
+    void on_syncDone(int nErrorcode, bool isNetworkError, const QString& strErrorMsg, bool isBackground);
     void on_syncDone_userVerified();
 
     void on_syncProcessLog(const QString& strMsg);
@@ -427,6 +447,7 @@ public Q_SLOTS:
     void showTrayIconMenu();
     void on_viewMessage_request(qint64 messageID);
     void on_viewMessage_request(const WIZMESSAGEDATA& msg);
+    void on_viewMessage_requestNormal(QVariant messageData);
     //
     void on_dockMenuAction_triggered();
     //
@@ -440,6 +461,7 @@ public Q_SLOTS:
     //
     void locateDocument(const WIZDOCUMENTDATA& data);
     void locateDocument(const QString& strKbGuid, const QString& strGuid);
+    void titleChanged();
 
     //
     void viewNoteInSeparateWindow(const WIZDOCUMENTDATA& data);
@@ -447,7 +469,9 @@ public Q_SLOTS:
     //
     void onAttachmentModified(QString strKbGUID, QString strGUID,QString strFileName,
                               QString strMD5, QDateTime dtLastModified);
-
+    //
+    //
+    void onThemeChanged();
 public:
     // WizExplorerApp pointer
     virtual QWidget* mainWindow();
@@ -469,6 +493,10 @@ public:
     QObject* DatabaseManager();
     Q_PROPERTY(QObject* DatabaseManager READ DatabaseManager)
 
+    QObject* CurrentDocumentBrowserObject();
+    Q_PROPERTY(QObject* CurrentDocumentBrowserObject READ CurrentDocumentBrowserObject)
+
+
     Q_INVOKABLE QObject* CreateWizObject(const QString& strObjectID);
     Q_INVOKABLE void SetSavingDocument(bool saving);
     Q_INVOKABLE void ProcessClipboardBeforePaste(const QVariantMap& data);
@@ -481,6 +509,7 @@ public:
     Q_INVOKABLE void SetDialogResult(int nResult);
     Q_INVOKABLE void AppStoreIAP();
     Q_INVOKABLE void copyLink(const QString& link);
+    Q_INVOKABLE void onClickedImage(const QString& src, const QString& list);
 
 private:
     void syncAllData();

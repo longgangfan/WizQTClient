@@ -51,7 +51,11 @@ public:
     virtual void setLeadInfoState(int state);
 
     // drawing
-    virtual void draw(QPainter* p, const QStyleOptionViewItem* vopt, int nViewType) const {}
+    virtual void draw(QPainter* p, const QStyleOptionViewItem* vopt, int nViewType) const {
+        Q_UNUSED(p);
+        Q_UNUSED(vopt);
+        Q_UNUSED(nViewType);
+    }
 
 protected:
     int m_nSortingType;      // upercase : -  decrease : +
@@ -99,6 +103,7 @@ public:
 
     const WizDocumentListViewItemData& itemData() { return m_data; }
     const WIZDOCUMENTDATA& document() const { return m_data.doc; }
+    WIZDOCUMENTDATA& document() { return m_data.doc; }
     int itemType() const { return m_data.nType; }
     int documentSize() const;
     QString documentLocation() const;

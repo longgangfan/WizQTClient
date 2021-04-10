@@ -46,6 +46,11 @@
 #define WIZACTION_TITLEBAR_SHARE_DOCUMENT_BY_LINK QObject::tr("Share by Link")
 #define WIZACTION_TITLEBAR_SHARE_DOCUMENT_BY_EMAIL QObject::tr("Share by Email")
 
+#define TITLE_BUTTON_ICON_SIZE       WizSmartScaleUI(14)
+static const WizIconOptions ICON_OPTIONS(WIZ_TINT_COLOR, "#a6a6a6", WIZ_TINT_COLOR);
+static const WizIconOptions CHECKABLE_ICON_OPTIONS(WIZ_TINT_COLOR, "#a6a6a6", WIZ_TINT_COLOR);
+
+
 QString getOptionKey()
 {
 #ifdef Q_OS_MAC
@@ -75,8 +80,7 @@ WizTitleBar::WizTitleBar(WizExplorerApp& app, QWidget *parent)
     m_editTitle->setFixedHeight(nTitleHeight);
     m_editTitle->setAlignment(Qt::AlignVCenter);
     m_editTitle->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-
-//    m_editorBar->setFixedHeight(nEditToolBarHeight);
+    //
     m_editorBar->layout()->setAlignment(Qt::AlignVCenter);
 
     QString strTheme = Utils::WizStyleHelper::themeName();
@@ -86,34 +90,41 @@ WizTitleBar::WizTitleBar(WizExplorerApp& app, QWidget *parent)
     layout->setSpacing(0);
     setLayout(layout);
 
+    QSize iconSize = QSize(TITLE_BUTTON_ICON_SIZE, TITLE_BUTTON_ICON_SIZE);
     m_editBtn = new WizRoundCellButton(this);
     QString shortcut = ::WizGetShortcut("EditNote", "Alt+1");
     m_editBtn->setShortcut(QKeySequence::fromString(shortcut));
-    m_editBtn->setNormalIcon(::WizLoadSkinIcon(strTheme, "document_lock"), tr("Edit"), tr("Switch to Editing View  %1%2").arg(getOptionKey()).arg(1));
-    m_editBtn->setCheckedIcon(::WizLoadSkinIcon(strTheme, "document_unlock"), tr("Read") , tr("Switch to Reading View  %1%2").arg(getOptionKey()).arg(1));
-    m_editBtn->setBadgeIcon(::WizLoadSkinIcon(strTheme, "document_unlock"), tr("Save & Read"), tr("Save and switch to Reading View  %1%2").arg(getOptionKey()).arg(1));
+    m_editBtn->setNormalIcon(::WizLoadSkinIcon(strTheme, "document_lock", iconSize, ICON_OPTIONS), tr("Edit"), tr("Switch to Editing View  %1%2").arg(getOptionKey()).arg(1));
+    m_editBtn->setCheckedIcon(::WizLoadSkinIcon(strTheme, "document_unlock", iconSize, ICON_OPTIONS), tr("Read") , tr("Switch to Reading View  %1%2").arg(getOptionKey()).arg(1));
+    m_editBtn->setBadgeIcon(::WizLoadSkinIcon(strTheme, "document_unlock", iconSize, ICON_OPTIONS), tr("Save & Read"), tr("Save and switch to Reading View  %1%2").arg(getOptionKey()).arg(1));
     connect(m_editBtn, SIGNAL(clicked()), SLOT(onEditButtonClicked()));    
+
+    m_mindmapBtn = new WizCellButton(WizCellButton::ImageOnly, this);
+    m_mindmapBtn->setCheckable(true);
+    m_mindmapBtn->setChecked(false);
+    m_mindmapBtn->setFixedHeight(nTitleHeight);
+    m_mindmapBtn->setNormalIcon(::WizLoadSkinIcon(strTheme, "outline_mindmap", iconSize, ICON_OPTIONS), tr("View mindmap"));
+    connect(m_mindmapBtn, SIGNAL(clicked()), SLOT(onViewMindMapClicked()));
 
     m_separateBtn = new WizCellButton(WizCellButton::ImageOnly, this);
     m_separateBtn->setFixedHeight(nTitleHeight);
     QString separateShortcut = ::WizGetShortcut("EditNoteSeparate", "Alt+2");
     m_separateBtn->setShortcut(QKeySequence::fromString(separateShortcut));
-    m_separateBtn->setNormalIcon(::WizLoadSkinIcon(strTheme, "document_use_separate"), tr("View note in seperate window  %1%2").arg(getOptionKey()).arg(2));
+    m_separateBtn->setNormalIcon(::WizLoadSkinIcon(strTheme, "document_use_separate", iconSize, ICON_OPTIONS), tr("View note in seperate window  %1%2").arg(getOptionKey()).arg(2));
     connect(m_separateBtn, SIGNAL(clicked()), SLOT(onSeparateButtonClicked()));
 
     m_tagBtn = new WizCellButton(WizCellButton::ImageOnly, this);
     m_tagBtn->setFixedHeight(nTitleHeight);
     QString tagsShortcut = ::WizGetShortcut("EditNoteTags", "Alt+3");
     m_tagBtn->setShortcut(QKeySequence::fromString(tagsShortcut));
-    m_tagBtn->setNormalIcon(::WizLoadSkinIcon(strTheme, "document_tag"), tr("View and add tags  %1%2").arg(getOptionKey()).arg(3));
-    m_tagBtn->setCheckedIcon(::WizLoadSkinIcon(strTheme, "document_tag_on"), tr("View and add tags  %1%2").arg(getOptionKey()).arg(3));
+    m_tagBtn->setNormalIcon(::WizLoadSkinIcon(strTheme, "document_tag", iconSize, ICON_OPTIONS), tr("View and add tags  %1%2").arg(getOptionKey()).arg(3));
     connect(m_tagBtn, SIGNAL(clicked()), SLOT(onTagButtonClicked()));
 
     m_shareBtn = new WizCellButton(WizCellButton::ImageOnly, this);
     m_shareBtn->setFixedHeight(nTitleHeight);
     QString shareShortcut = ::WizGetShortcut("EditShare", "Alt+4");
     m_shareBtn->setShortcut(QKeySequence::fromString(shareShortcut));
-    m_shareBtn->setNormalIcon(::WizLoadSkinIcon(strTheme, "document_share"), tr("Share note  %1%2").arg(getOptionKey()).arg(4));
+    m_shareBtn->setNormalIcon(::WizLoadSkinIcon(strTheme, "document_share", iconSize, ICON_OPTIONS), tr("Share note  %1%2").arg(getOptionKey()).arg(4));
     connect(m_shareBtn, SIGNAL(clicked()), SLOT(onShareButtonClicked()));
     WizOEMSettings oemSettings(m_app.databaseManager().db().getAccountPath());
     m_shareBtn->setVisible(!oemSettings.isHideShare());
@@ -142,16 +153,14 @@ WizTitleBar::WizTitleBar(WizExplorerApp& app, QWidget *parent)
     m_infoBtn->setFixedHeight(nTitleHeight);
     QString infoShortcut = ::WizGetShortcut("EditNoteInfo", "Alt+5");
     m_infoBtn->setShortcut(QKeySequence::fromString(infoShortcut));
-    m_infoBtn->setNormalIcon(::WizLoadSkinIcon(strTheme, "document_info"), tr("View and modify note's info  %1%2").arg(getOptionKey()).arg(5));
-    m_infoBtn->setCheckedIcon(::WizLoadSkinIcon(strTheme, "document_info_on"), tr("View and modify note's info  %1%2").arg(getOptionKey()).arg(5));
+    m_infoBtn->setNormalIcon(::WizLoadSkinIcon(strTheme, "document_info", iconSize, ICON_OPTIONS), tr("View and modify note's info  %1%2").arg(getOptionKey()).arg(5));
     connect(m_infoBtn, SIGNAL(clicked()), SLOT(onInfoButtonClicked()));
 
     m_attachBtn = new WizCellButton(WizCellButton::WithCountInfo, this);
     m_attachBtn->setFixedHeight(nTitleHeight);
     QString attachmentShortcut = ::WizGetShortcut("EditNoteAttachments", "Alt+6");
     m_attachBtn->setShortcut(QKeySequence::fromString(attachmentShortcut));
-    m_attachBtn->setNormalIcon(::WizLoadSkinIcon(strTheme, "document_attachment"), tr("Add attachments  %1%2").arg(getOptionKey()).arg(6));
-    m_attachBtn->setCheckedIcon(::WizLoadSkinIcon(strTheme, "document_attachment_on"), tr("Add attachments  %1%2").arg(getOptionKey()).arg(6));
+    m_attachBtn->setNormalIcon(::WizLoadSkinIcon(strTheme, "document_attachment", iconSize, ICON_OPTIONS), tr("Add attachments  %1%2").arg(getOptionKey()).arg(6));
     connect(m_attachBtn, SIGNAL(clicked()), SLOT(onAttachButtonClicked()));
 
     // comments
@@ -159,8 +168,7 @@ WizTitleBar::WizTitleBar(WizExplorerApp& app, QWidget *parent)
     m_commentsBtn->setFixedHeight(nTitleHeight);
     QString commentShortcut = ::WizGetShortcut("ShowComment", "Alt+c");
     m_commentsBtn->setShortcut(QKeySequence::fromString(commentShortcut));
-    m_commentsBtn->setNormalIcon(::WizLoadSkinIcon(strTheme, "comments"), tr("Add comments  %1C").arg(getOptionKey()));
-    m_commentsBtn->setCheckedIcon(::WizLoadSkinIcon(strTheme, "comments_on"), tr("Add comments  %1C").arg(getOptionKey()));
+    m_commentsBtn->setNormalIcon(::WizLoadSkinIcon(strTheme, "comments", iconSize, CHECKABLE_ICON_OPTIONS), tr("Add comments  %1C").arg(getOptionKey()));
     connect(m_commentsBtn, SIGNAL(clicked()), SLOT(onCommentsButtonClicked()));
     connect(WizGlobal::instance(), SIGNAL(viewNoteLoaded(WizDocumentView*,const WIZDOCUMENTDATAEX&,bool)),
             SLOT(onViewNoteLoaded(WizDocumentView*,const WIZDOCUMENTDATAEX&,bool)));
@@ -171,7 +179,8 @@ WizTitleBar::WizTitleBar(WizExplorerApp& app, QWidget *parent)
     layoutInfo2->setSpacing(0);
     layoutInfo2->addWidget(m_editTitle);
     layoutInfo2->addWidget(m_editBtn);
-    layoutInfo2->addSpacing(7);
+    layoutInfo2->addWidget(m_mindmapBtn);
+    layoutInfo2->addSpacing(::WizSmartScaleUI(7));
     layoutInfo2->addWidget(m_separateBtn);
     layoutInfo2->addWidget(m_tagBtn);
     layoutInfo2->addWidget(m_shareBtn);
@@ -180,7 +189,9 @@ WizTitleBar::WizTitleBar(WizExplorerApp& app, QWidget *parent)
 //    layoutInfo2->addWidget(m_emailBtn);
     layoutInfo2->addWidget(m_infoBtn);
     layoutInfo2->addWidget(m_attachBtn);
-    layoutInfo2->addWidget(m_commentsBtn);    
+    layoutInfo2->addWidget(m_commentsBtn);
+    //
+    initPlugins(layoutInfo2);
 
     QVBoxLayout* layoutInfo1 = new QVBoxLayout();
     layoutInfo1->setContentsMargins(Utils::WizStyleHelper::editorBarMargins());
@@ -203,6 +214,62 @@ WizTitleBar::WizTitleBar(WizExplorerApp& app, QWidget *parent)
             SLOT(on_commentTokenAcquired(QString)));
     connect(m_commentManager, SIGNAL(commentCountAcquired(QString,int)),
             SLOT(on_commentCountAcquired(QString,int)));
+}
+
+void WizTitleBar::applyTheme()
+{
+    m_editTitle->applyTheme();
+    m_editorBar->applyTheme();
+}
+
+void WizTitleBar::initPlugins(QLayout* layout)
+{
+    int nTitleHeight = Utils::WizStyleHelper::titleEditorHeight();
+    m_plugins = WizPlugins::plugins().pluginsByType("document");
+    for (auto data : m_plugins) {
+        //
+        WizCellButton* button = new WizCellButton(WizCellButton::ImageOnly, this);
+        button->setUserObject(data);
+        button->setFixedHeight(nTitleHeight);
+        button->setNormalIcon(data->icon(), data->name());
+        connect(button, SIGNAL(clicked()), SLOT(onPluginButtonClicked()));
+        layout->addWidget(button);
+        //
+    }
+}
+
+void WizTitleBar::onPluginButtonClicked()
+{
+    WizCellButton* button = dynamic_cast<WizCellButton *>(sender());
+    if (!button) {
+        return;
+    }
+    //
+    WizPluginData* data = dynamic_cast<WizPluginData *>(button->userObject());
+    if (!data) {
+        return;
+    }
+    //
+    QString guid = data->guid();
+    auto it = m_pluginWidget.find(guid);
+    WizPluginPopupWidget* widget;
+    if (it == m_pluginWidget.end()) {
+        widget = new WizPluginPopupWidget(m_app, data, this);
+        m_pluginWidget.insert(std::make_pair(guid, widget));
+    } else {
+        widget = it->second;
+    }
+    //
+    QPoint pt = mapToGlobal(button->geometry().center());
+    pt.setY(pt.y() + button->rect().height() / 2);
+    data->emitShowEvent();
+    if (isDarkMode()) {
+        widget->web()->setVisible(false);
+        QTimer::singleShot(500, [=] {
+            widget->web()->setVisible(true);
+        });
+    }
+    widget->showAtPoint(pt);
 }
 
 WizDocumentView* WizTitleBar::noteView()
@@ -275,20 +342,6 @@ void WizTitleBar::setEditor(WizDocumentWebView* editor)
 
     m_editor = editor;
 }
-
-void WizTitleBar::setBackgroundColor(QColor color)
-{
-    QPalette pal = m_editTitle->palette();
-    pal.setColor(QPalette::Window, color);
-    m_editTitle->setPalette(pal);
-
-    m_editTitle->setStyleSheet("QLineEdit{background:#F5F5F5; border: 1px solid red;}");
-
-//    pal = m_infoBar->palette();
-//    pal.setColor(QPalette::Window, color);
-//    m_infoBar->setPalette(pal);
-}
-
 
 void WizTitleBar::onEditorFocusIn()
 {
@@ -377,6 +430,7 @@ void WizTitleBar::onEditorChanged()
 
 void WizTitleBar::setNote(const WIZDOCUMENTDATA& data, WizEditorMode editorMode, bool locked)
 {
+    Q_UNUSED(locked);
     updateInfo(data);
     setEditorMode(editorMode);
     //
@@ -387,8 +441,10 @@ void WizTitleBar::setNote(const WIZDOCUMENTDATA& data, WizEditorMode editorMode,
     if (!isGroup)
     {
         m_tagBar->setDocument(data);
-
     }
+    //
+    m_mindmapBtn->setVisible(data.strType == "outline");
+    m_mindmapBtn->setChecked(false);
 }
 
 void WizTitleBar::updateInfo(const WIZDOCUMENTDATA& doc)
@@ -406,9 +462,11 @@ void WizTitleBar::setEditorMode(WizEditorMode editorMode)
     if (editorMode == modeReader)
     {
         showInfoBar();
+        m_editorBar->switchToNormalMode();
     }
     else
     {
+        m_editorBar->switchToNormalMode();
         showEditorBar();
     }
 }
@@ -542,6 +600,14 @@ void WizTitleBar::onTagButtonClicked()
     WizGetAnalyzer().logAction("showTags");
 }
 
+void WizTitleBar::onViewMindMapClicked()
+{
+    bool on = m_mindmapBtn->isChecked();
+    //m_mindmapBtn->setChecked(on);
+    emit onViewMindMap(on);
+    m_mindmapBtn->setState(on ? WizCellButton::Checked : WizCellButton::Normal);
+}
+
 QAction* actionFromMenu(QMenu* menu, const QString& text)
 {
     QList<QAction*> actionList = menu->actions();
@@ -673,6 +739,7 @@ bool isNetworkAccessible()
 void WizTitleBar::onCommentsButtonClicked()
 {
     QWebEngineView* comments = noteView()->commentView();
+    Q_UNUSED(comments);
 
     WizDocumentView* view = noteView();
     if (!view)

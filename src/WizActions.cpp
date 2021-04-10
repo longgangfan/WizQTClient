@@ -7,6 +7,7 @@
 #include "share/WizSettings.h"
 #include "share/WizAnimateAction.h"
 #include "widgets/WizTableSelector.h"
+#include "share/WizUIBase.h"
 
 struct WIZACTION
 {
@@ -30,33 +31,33 @@ WIZACTION* WizActions::actionsData()
     static WIZACTION arrayRoot[] =
     {
     #ifdef Q_OS_LINUX
-        {"actionFile", QObject::tr("&File")},
-        {"actionEdit", QObject::tr("&Edit")},
-        {"actionView", QObject::tr("&View")},
-        {"actionFormat", QObject::tr("For&mat")},
-        {"actionTools", QObject::tr("&Tools")},
-        {"actionWindow", QObject::tr("&Window")},
-        {"actionHelp", QObject::tr("&Help")},
+        {"actionFile", QObject::tr("&File"), "", QKeySequence()},
+        {"actionEdit", QObject::tr("&Edit"), "", QKeySequence()},
+        {"actionView", QObject::tr("&View"), "", QKeySequence()},
+        {"actionFormat", QObject::tr("For&mat"), "", QKeySequence()},
+        {"actionTools", QObject::tr("&Tools"), "", QKeySequence()},
+        {"actionWindow", QObject::tr("&Window"), "", QKeySequence()},
+        {"actionHelp", QObject::tr("&Help"), "", QKeySequence()},
     #else
         // root
-        {"actionFile", QObject::tr("File")},
-        {"actionEdit", QObject::tr("Edit")},
-        {"actionView", QObject::tr("View")},
-        {"actionFormat", QObject::tr("Format")},
-        {"actionTools", QObject::tr("Tools")},
-        {"actionWindow", QObject::tr("Window")},
-        {"actionHelp", QObject::tr("Help")},
+        {"actionFile", QObject::tr("File"), "", QKeySequence()},
+        {"actionEdit", QObject::tr("Edit"), "", QKeySequence()},
+        {"actionView", QObject::tr("View"), "", QKeySequence()},
+        {"actionFormat", QObject::tr("Format"), "", QKeySequence()},
+        {"actionTools", QObject::tr("Tools"), "", QKeySequence()},
+        {"actionWindow", QObject::tr("Window"), "", QKeySequence()},
+        {"actionHelp", QObject::tr("Help"), "", QKeySequence()},
     #endif
 
         // sub
-        {"actionText", QObject::tr("Text")},
-        {"actionList", QObject::tr("List")},
-        {"actionTable", QObject::tr("Table")},
-        {"actionLink", QObject::tr("Link")},
-        {"actionStyle", QObject::tr("Style")},
-        {"actionInsert", QObject::tr("Insert")},
-        {"actionCategoryOption", QObject::tr("Category Option")},
-        {"actionSortBy", QObject::tr("Sort By")}
+        {"actionText", QObject::tr("Text"), "", QKeySequence()},
+        {"actionList", QObject::tr("List"), "", QKeySequence()},
+        {"actionTable", QObject::tr("Table"), "", QKeySequence()},
+        {"actionLink", QObject::tr("Link"), "", QKeySequence()},
+        {"actionStyle", QObject::tr("Style"), "", QKeySequence()},
+        {"actionInsert", QObject::tr("Insert"), "", QKeySequence()},
+        {"actionCategoryOption", QObject::tr("Category Option"), "", QKeySequence()},
+        {"actionSortBy", QObject::tr("Sort By"), "", QKeySequence()}
     };
 
     Q_UNUSED(arrayRoot);
@@ -73,6 +74,7 @@ WIZACTION* WizActions::actionsData()
         {"actionNewNoteByTemplate",             QObject::tr("New Note by Template..."),      "",          QKeySequence()},
         {WIZACTION_GLOBAL_SAVE_AS_PDF,      QObject::tr("Save as PDF..."),             "",      QKeySequence()},
         {WIZACTION_GLOBAL_SAVE_AS_HTML,      QObject::tr("Save as Html..."),          "",      QKeySequence()},
+        {WIZACTION_GLOBAL_SAVE_AS_MARKDOWN,      QObject::tr("Save as Markdown..."),          "",      QKeySequence()},
         {WIZACTION_GLOBAL_IMPORT_FILE,      QObject::tr("Import Files..."),          "",      QKeySequence()},
         {WIZACTION_GLOBAL_PRINT_MARGIN,      QObject::tr("PDF Page Margins..."),   "",     QKeySequence()},
         //{WIZACTION_GLOBAL_VIEW_MESSAGES,    QObject::tr("View messages"),     "",       QKeySequence()},
@@ -98,6 +100,7 @@ WIZACTION* WizActions::actionsData()
 
         // view
         {WIZACTION_GLOBAL_TOGGLE_CATEGORY,      QObject::tr("Hide Sidebar"),   QObject::tr("Show Sidebar"),    QKeySequence("Alt+Ctrl+S")},
+        {WIZACTION_GLOBAL_SHOW_SUB_FOLDER_DOCUMENTS,      QObject::tr("Show sub folder documents"),   QObject::tr(""),    QKeySequence("")},
         {WIZACTION_GLOBAL_TOGGLE_FULLSCREEN,    QObject::tr("Enter Fullscreen"),       QObject::tr("Leave Fullscreen"),         QKeySequence("Ctrl+Meta+f")},
 
         {"actionViewMinimize",                                               QObject::tr("Minimize"),       QObject::tr(""),         QKeySequence("Ctrl+M")},
@@ -152,6 +155,8 @@ WIZACTION* WizActions::actionsData()
     return arrayActions;
 }
 
+const WizIconOptions ICON_OPTIONS = WizIconOptions(Qt::transparent, "#a6a6a6", Qt::transparent);
+
 WizShortcutAction *WizActions::addAction(WIZACTION& action, bool bUseExtraShortcut)
 {   
     QString strText = action.strText;
@@ -162,7 +167,7 @@ WizShortcutAction *WizActions::addAction(WIZACTION& action, bool bUseExtraShortc
     WizShortcutAction* pAction = new WizShortcutAction(strText, m_parent);
 
     if (!strIconName.isEmpty()) {
-        pAction->setIcon(::WizLoadSkinIcon(m_app.userSettings().skin(), strIconName));
+        pAction->setIcon(::WizLoadSkinIcon(m_app.userSettings().skin(), strIconName, QSize(), ICON_OPTIONS));
     }
 
     pAction->setShortcut(strShortcut);
@@ -214,7 +219,7 @@ WizShortcutAction *WizActions::actionFromName(const QString& strActionName)
         return pAction;
     }
 
-    WIZACTION data = {strActionName, strActionName};
+    WIZACTION data = {strActionName, strActionName, "", QKeySequence()};
 
     return addAction(data, false);
 }

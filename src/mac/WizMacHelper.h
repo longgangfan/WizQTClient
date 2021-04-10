@@ -54,14 +54,13 @@ QString wizConvertYosemiteFilePathToNormalPath(const QString& strYosePath);
 
 void initCrashReporter();
 
-void enableWidgetBehindBlur(QWidget* wgt);
-//void enableWidgetBlendingBlur(QWidget* wgt);
-
-bool systemWidgetBlurAvailable();
-
 int getSystemMajorVersion();
 int getSystemMinorVersion();
 int getSystemPatchVersion();
+
+bool isDarkMode();
+bool isMojaveOrHigher();
+void wizMacThemeInit();
 
 void updateShareExtensionAccount(const QString &userId, const QString &userGUID, const QString &myWiz, const QString &displayName);
 void readShareExtensionAccount();

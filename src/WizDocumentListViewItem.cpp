@@ -47,6 +47,7 @@ WizDocumentListViewDocumentItem::WizDocumentListViewDocumentItem(WizExplorerApp&
 
 void WizDocumentListViewDocumentItem::resetAvatar(const QString& strFileName)
 {
+    Q_UNUSED(strFileName);
     Q_EMIT thumbnailReloaded();
 }
 
@@ -58,7 +59,11 @@ bool WizDocumentListViewDocumentItem::isAvatarNeedUpdate(const QString& strFileN
 
     QFileInfo info(strFileName);
 
+#if (QT_VERSION >= QT_VERSION_CHECK(5, 10, 0))
+    QDateTime tCreated = info.birthTime();
+#else
     QDateTime tCreated = info.created();
+#endif
     QDateTime tNow = QDateTime::currentDateTime();
     if (tCreated.daysTo(tNow) >= 1) { // download avatar before yesterday
         return true;
@@ -702,37 +707,29 @@ void WizDocumentListViewDocumentItem::drawSyncStatus(QPainter* p, const QStyleOp
 {
     Q_UNUSED(nViewType);
 
-    QString strIconPath;
     WizDatabase& db = m_app.databaseManager().db(m_data.doc.strKbGUID);
-    bool isRetina = WizIsHighPixel();
-    strIconPath = ::WizGetSkinResourcePath(m_app.userSettings().skin());
     //
-    bool attachModified = false;
-    /*  //影响显示效率
-    CWizDocumentAttachmentDataArray arrayAttachment;
-    db.getDocumentAttachments(m_data.doc.strGUID, arrayAttachment);
-    for (WIZDOCUMENTATTACHMENTDATAEX attachment : arrayAttachment)
+    QPixmap pix;
+    const QSize iconSize(WizSmartScaleUI(16), WizSmartScaleUI(16));
+    static QIcon download = WizLoadSkinIcon(m_app.userSettings().skin(), "document_needDownload", iconSize);
+    static QIcon upload = WizLoadSkinIcon(m_app.userSettings().skin(), "document_needUpload", iconSize);
+    static QPixmap pixmapDownload = download.pixmap(iconSize);
+    static QPixmap pixmapUpload = upload.pixmap(iconSize);
+    //
+    if (db.isDocumentModified(m_data.doc.strGUID))
     {
-        if (db.isAttachmentModified(attachment.strGUID))
-            attachModified = true;        
-    }
-    */
-    if (db.isDocumentModified(m_data.doc.strGUID) || attachModified)
-    {
-        strIconPath += isRetina ? "document_needUpload@2x.png" : "document_needUpload.png";
+        pix = pixmapUpload;
     }
     else if (!db.isDocumentDownloaded(m_data.doc.strGUID))
     {
-        strIconPath += isRetina ? "document_needDownload@2x.png" : "document_needDownload.png";
+        pix = pixmapDownload;
     }
     else
         return;
 
     p->save();
     int nMargin = -1;
-    QPixmap pix(strIconPath);
-    QSize szPix = pix.size();
-    WizScaleIconSizeForRetina(szPix);
+    QSize szPix = iconSize;
     QRect rcSync(vopt->rect.right() - szPix.width() - nMargin, vopt->rect.bottom() - szPix.height() - nMargin,
                  szPix.width(), szPix.height());
     if (vopt->state & QStyle::State_Selected)
@@ -860,12 +857,13 @@ bool WizDocumentListViewSectionItem::operator<(const QListWidgetItem& other) con
 
 void WizDocumentListViewSectionItem::draw(QPainter* p, const QStyleOptionViewItem* vopt, int nViewType) const
 {
+    Q_UNUSED(nViewType);
     p->save();
     p->fillRect(vopt->rect, Utils::WizStyleHelper::listViewSectionItemBackground());
 
     p->setPen(Utils::WizStyleHelper::listViewSectionItemText());
     QFont font;
-    font.setPixelSize(12);
+    font.setPixelSize(WizSmartScaleUI(12));
     p->setFont(font);
     QRect rc = vopt->rect;
     rc.setLeft(rc.x() + Utils::WizStyleHelper::listViewItemHorizontalPadding());

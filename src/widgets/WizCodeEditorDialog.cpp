@@ -33,12 +33,8 @@ WizCodeEditorDialog::WizCodeEditorDialog(WizExplorerApp& app, WizDocumentWebView
   , m_external(external)
   , m_codeBrowser(new WizWebEngineView(this))
 {
-    m_codeBrowser->addToJavaScriptWindowObject("codeEditor", this);
-    m_codeBrowser->addToJavaScriptWindowObject("external", m_external);
-
+    WizWebEngineView::initWebEngineView(m_codeBrowser, {{"codeEditor", this}, {"external", external}});
     //
-    //setAttribute(Qt::WA_DeleteOnClose);
-    //setWindowFlags(Qt::WindowStaysOnTopHint);          //could cause fullscreen problem on mac when mainwindow was fullscreen
     setWindowState(windowState() & ~Qt::WindowFullScreen);
     resize(650, 550);
     //
@@ -62,6 +58,7 @@ WizCodeEditorDialog::WizCodeEditorDialog(WizExplorerApp& app, WizDocumentWebView
 
 void WizCodeEditorDialog::setCode(const QString& strCode)
 {
+    Q_UNUSED(strCode);
 //    if (!strCode.isEmpty())
 //    {
 //        //m_codeEditor->page()->mainFrame()->setHtml(strCode);

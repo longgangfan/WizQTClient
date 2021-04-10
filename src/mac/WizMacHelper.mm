@@ -9,6 +9,8 @@
 #include <QStringList>
 #include <QEventLoop>
 #include <QDebug>
+#include <QPixmap>
+#include <qmacfunctions.h>
 #include "html/WizHtmlCollector.h"
 
 #import <WebKit/WebKit.h>
@@ -29,12 +31,9 @@
 #include <qmacfunctions.h>
 #endif
 
-
-
 #define WizShareSettingsName    @"KCS8N3QJ92.cn.wiz.extension"
 
-
-
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
 
 @interface DBSCustomView: NSView
 
@@ -53,67 +52,6 @@
 }
 @end
 
-// @interface NSView (Vibrancy)
-
-// //Returns NSVisualEffectView
-// - (instancetype)insertVibrancyViewBlendingMode:(NSVisualEffectBlendingMode)mode;
-
-// @end
-
-// @implementation NSView (Vibrancy)
-
-// - (instancetype)insertVibrancyViewBlendingMode:(NSVisualEffectBlendingMode)mode
-// {
-//     Class vibrantClass=NSClassFromString(@"NSVisualEffectView");
-//     if (vibrantClass)
-//     {
-//         NSLog(@"self bounds %f, %f ", self.bounds.size.width, self.bounds.size.height);
-//         NSVisualEffectView *vibrant=[[vibrantClass alloc] initWithFrame:self.bounds];
-//         [vibrant setAutoresizingMask:NSViewHeightSizable|NSViewWidthSizable|NSViewMaxXMargin | NSViewMinXMargin | NSViewMaxYMargin | NSViewMinYMargin];
-//         [vibrant setBlendingMode:mode];
-
-//         [self addSubview:vibrant positioned:NSWindowBelow relativeTo:nil];
-
-//         return vibrant;
-//     }
-//     return nil;
-// }
-
-// @end
-
-
-// @implementation NSWindow (BackgroundBlur)
-
-// - (void)enableBehindBlur
-// {
-//     [self.contentView insertVibrancyViewBlendingMode:NSVisualEffectBlendingModeBehindWindow];
-
-// //    DBSCustomView *view = [[DBSCustomView alloc] initWithFrame:NSMakeRect(0, 0, 100, 100)];
-// //    [self.contentView addSubview:view];
-// }
-
-
-// //- (void)enableBlendingBlur
-// //{
-// //    [self.contentView insertVibrancyViewBlendingMode:NSVisualEffectBlendingModeWithinWindow];
-// //}
-
-// @end
-
-
-void enableWidgetBehindBlur(QWidget* wgt)
-{
-    // NSView *nsview = (NSView *) wgt->winId();
-    // NSWindow *nswindow = [nsview window];
-    // [nswindow enableBehindBlur];
-}
-
-//void enableWidgetBlendingBlur(QWidget* wgt)
-//{
-//    NSView *nsview = (NSView *) wgt->winId();
-//    NSWindow *nswindow = [nsview window];
-//    [nswindow enableBlendingBlur];
-//}
 
 @interface CreateNoteService : NSObject
 
@@ -391,6 +329,9 @@ void convertYosemiteFileListToNormalList(QStringList& fileList)
                  userData:(NSString *)userData
                     error:(NSString **)error
 {
+    Q_UNUSED(userData);
+    Q_UNUSED(error);
+    //
     for (NSString *type in [pboard types])
     {
         //NSLog(@"types %@", type);
@@ -473,6 +414,8 @@ QString wizConvertYosemiteFilePathToNormalPath(const QString& strYosePath)
 
 void wizHIDictionaryWindowShow(const QString& strText, QRect rcText)
 {
+    Q_UNUSED(strText);
+    Q_UNUSED(rcText);
 //    CFStringRef cfString = (CFStringRef)WizToNSString(strText);
 //    [HIDictionaryWindowShow dictionary:NULL textString:cfString selectionRange:];
 }
@@ -572,6 +515,9 @@ bool processWebarchiveImageUrl(const QString& strFileName, QString& strHtml, con
 
         virtual void startTag(WizHtmlTag *pTag, DWORD dwAppData, bool &bAbort)
         {
+            Q_UNUSED(bAbort);
+            Q_UNUSED(dwAppData);
+            //
             QString tagName = pTag->getTagName();
             tagName = tagName.toUpper();
             //
@@ -707,8 +653,11 @@ void wizMacSetClipboardText(const QString& strText)
 
 void wizMacGetClipboardHtml(const QString& html, QString& url)
 {
+    Q_UNUSED(html);
+    Q_UNUSED(url);
+    //
     NSArray* arr = [[NSPasteboard generalPasteboard] types];
-    for (int i = 0; i < arr.count; i++)
+    for (int i = 0; i < (int)arr.count; i++)
     {
         NSString* type = arr[i];
         NSLog(@"%@", type);
@@ -727,8 +676,9 @@ void wizMacGetClipboardHtml(const QString& html, QString& url)
             NSArray *subItems = [NSArray arrayWithArray:[webArchive objectForKey:@"WebSubresources"]];
             NSPredicate *iPredicate = [NSPredicate predicateWithFormat:@"WebResourceMIMEType like 'image*'"];
             NSArray *imagesArray = [subItems filteredArrayUsingPredicate:iPredicate];
-            for (int i=0; i<[imagesArray count]; i++) {
+            for (int i=0; i < (int)[imagesArray count]; i++) {
                 NSDictionary *sItem = [NSDictionary dictionaryWithDictionary:[imagesArray objectAtIndex:i]];
+                Q_UNUSED(sItem);
                 //NSImage *sImage = [NSImage imageWithData:[sItem valueForKey:@"WebResourceData"]];
                 // handle images
             }
@@ -863,29 +813,6 @@ void adjustSubViews(QWidget* wgt)
 }
 
 
-
-
-int getSystemMinorVersion()
-{
-    SInt32 minor;
-//    SInt32 major, minor, bugfix;
-//    Gestalt(gestaltSystemVersionMajor, &major);
-    Gestalt(gestaltSystemVersionMinor, &minor);
-//    Gestalt(gestaltSystemVersionBugFix, &bugfix);
-//    NSOperatingSystemVersion systemVersion = [[NSProcessInfo processInfo] operatingSystemVersion];
-//    return systemVersion.minorVersion;
-
-    return minor;
-}
-
-
-bool systemWidgetBlurAvailable()
-{
-    return false;
-    return (getSystemMinorVersion() >= 15) || (getSystemMinorVersion() == 10 && getSystemPatchVersion() >= 4);
-}
-
-
 int getSystemMajorVersion()
 {
     SInt32 major;
@@ -894,6 +821,12 @@ int getSystemMajorVersion()
     return major;
 }
 
+int getSystemMinorVersion()
+{
+    SInt32 minor;
+    Gestalt(gestaltSystemVersionMinor, &minor);
+    return minor;
+}
 
 int getSystemPatchVersion()
 {
@@ -901,6 +834,73 @@ int getSystemPatchVersion()
     Gestalt(gestaltSystemVersionBugFix, &bugfix);
     return bugfix;
 }
+
+//
+bool detectDarkMode(bool force)
+{
+    static bool first = true;
+    static bool ret = false;
+    if (first || force) {
+        first = false;
+        //
+        int major = getSystemMajorVersion();
+        int minor = getSystemMinorVersion();
+        //return false;
+        if ((major >= 11) || (major == 10 && minor >= 15)) {
+            NSString* appearanceDescription = [NSApplication sharedApplication].effectiveAppearance.debugDescription.lowercaseString;
+            if ([appearanceDescription rangeOfString:@"dark"].location != NSNotFound) {
+                ret = true;
+            }
+            return ret;
+        }
+        if ((major >= 11) || (major == 10 && minor >= 14)) {
+            //
+            NSDictionary *dictApp = [[NSBundle mainBundle] infoDictionary];
+            id requireAquaSystemAppearance = [dictApp valueForKey:@"NSRequiresAquaSystemAppearance"];
+            if (requireAquaSystemAppearance && [requireAquaSystemAppearance isKindOfClass:[NSNumber class]]) {
+                //
+                NSNumber* v = requireAquaSystemAppearance;
+                if ([v boolValue]) {
+                    ret = false;
+                    return false;
+                }
+            }
+            //
+            //
+            NSDictionary *dictGlobal = [[NSUserDefaults standardUserDefaults] persistentDomainForName:NSGlobalDomain];
+            id style = [dictGlobal objectForKey:@"AppleInterfaceStyle"];
+            bool darkModeOn = ( style && [style isKindOfClass:[NSString class]] && NSOrderedSame == [style caseInsensitiveCompare:@"dark"] );
+            ret = darkModeOn;
+        }
+    }
+    return ret;
+}
+//
+void resetDarkMode()
+{
+    detectDarkMode(true);
+}
+
+bool isDarkMode()
+{
+    return detectDarkMode(false);
+}
+
+bool isMojaveOrHigher()
+{
+    static bool isMojave = false;
+    static bool first = true;
+    if (first) {
+        first = false;
+        int major = getSystemMajorVersion();
+        int minor = getSystemMinorVersion();
+        if ((major >= 11) || (major == 10 && minor >= 14)) {
+            isMojave = true;
+        }
+    }
+    return isMojave;
+}
+
 
 void updateShareExtensionAccount(const QString& userId, const QString& userGUID, const QString& myWiz, const QString& displayName)
 {
@@ -1039,8 +1039,45 @@ QList<WizWindowInfo> WizGetActiveWindows()
             }
         }
     }
-    CFRelease(windowList);
-    CFRelease(processName);
+    //
+    if (windowList) {
+        CFRelease(windowList);
+    }
+    //
+    if (processName) {
+        CFRelease(processName);
+    }
 
     return windowTitles;
 }
+
+@interface WizThemeHelper : NSObject
+- (void) themeChanged: (NSNotification *) notification;
+@end
+
+@implementation WizThemeHelper
+- (id) init {
+    [super init];
+    [NSDistributedNotificationCenter.defaultCenter addObserver:self selector:@selector(themeChanged:) name:@"AppleInterfaceThemeChangedNotification" object: nil];
+    return self;
+}
+
+-(void)themeChanged:(NSNotification *) notification {
+
+    Q_UNUSED(notification);
+    resetDarkMode();
+    //
+    WizMainWindow *window = WizMainWindow::instance();
+    if (window) {
+        window->onThemeChanged();
+    }
+    //
+}
+@end
+
+
+void wizMacThemeInit() {
+    static WizThemeHelper* helper = [WizThemeHelper new];
+    Q_UNUSED(helper);
+}
+

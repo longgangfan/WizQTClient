@@ -9,6 +9,7 @@
 #include <QWebEngineView>
 #include <QWebEnginePage>
 #include <QWebEngineSettings>
+#include <QSpacerItem>
 
 #include "share/WizGlobal.h"
 
@@ -56,7 +57,7 @@ WizDocumentView::WizDocumentView(WizExplorerApp& app, QWidget* parent)
     , m_app(app)
     , m_dbMgr(app.databaseManager())
     , m_userSettings(app.userSettings())
-    , m_commentWidget(new WizLocalProgressWebView(app.mainWindow()))
+    , m_commentWidget(new WizLocalProgressWebView({{"WizExplorerApp", m_app.object()}}, app.mainWindow()))
     , m_title(new WizTitleBar(app, this))
     , m_passwordView(new WizUserCipherForm(app, this))
     , m_defaultViewMode(app.userSettings().noteViewMode())
@@ -75,7 +76,7 @@ WizDocumentView::WizDocumentView(WizExplorerApp& app, QWidget* parent)
 
     m_docView = new QWidget(this);
     m_docView->setLayout(layoutDoc);
-
+    //
     m_tab = new QStackedWidget(this);
     //
     m_passwordView->setGeometry(this->geometry());
@@ -106,28 +107,36 @@ WizDocumentView::WizDocumentView(WizExplorerApp& app, QWidget* parent)
     m_comments->setAcceptDrops(false);
     connect(m_comments, SIGNAL(loadFinishedEx(bool)), m_title, SLOT(onCommentPageLoaded(bool)));
 
-    m_comments->addToJavaScriptWindowObject("WizExplorerApp", m_app.object());
-    //
     connect(m_commentWidget, SIGNAL(widgetStatusChanged()), SLOT(on_commentWidget_statusChanged()));
 
     m_commentWidget->hide();
 
     QWidget* wgtEditor = new QWidget(m_docView);
+    m_wgtEditor = wgtEditor;
     //
-    m_web = new WizDocumentWebView(app, wgtEditor);
-    //m_web->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    //使用一个widget包含webview，否则夜间模式下新建编辑，界面容易出现晃动
+    QWidget* webContainer = new QWidget(wgtEditor);
+    webContainer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    m_web = new WizDocumentWebView(app, webContainer);
+    m_web->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    QVBoxLayout* webContainerLayout = new QVBoxLayout(webContainer);
+    webContainerLayout->setMargin(0);
+    webContainerLayout->setSpacing(0);
+    webContainerLayout->addWidget(m_web);
+    //
     m_title->setEditor(m_web);
     //
     QWebEnginePage* commentsPage = m_comments->page();
     connect(commentsPage, SIGNAL(linkClicked(QUrl, QWebEnginePage::NavigationType, bool, WizWebEnginePage*)), m_web, SLOT(onEditorLinkClicked(QUrl, QWebEnginePage::NavigationType, bool, WizWebEnginePage*)));
 
     QVBoxLayout* layoutEditor = new QVBoxLayout(wgtEditor);
+    //
     layoutEditor->setSpacing(0);
     layoutEditor->setContentsMargins(0, 5, 0, 0);
     layoutEditor->addWidget(m_title);
-    layoutEditor->addWidget(m_web);
+    layoutEditor->addWidget(webContainer);
     layoutEditor->setStretchFactor(m_title, 0);
-    layoutEditor->setStretchFactor(m_web, 1);
+    layoutEditor->setStretchFactor(webContainer, 1);
 
     //
     m_splitter = new WizSplitter(this);
@@ -200,12 +209,50 @@ WizDocumentView::WizDocumentView(WizExplorerApp& app, QWidget* parent)
     connect(checkThread, SIGNAL(finished()), m_editStatusChecker, SLOT(clearTimers()));
     m_editStatusChecker->moveToThread(checkThread);
     checkThread->start();
+    //
+    applyTheme();
 }
 
 WizDocumentView::~WizDocumentView()
 {
+    m_comments->disconnect();
+    disconnect();
+    //
     if (m_editStatusChecker)
         delete m_editStatusChecker;
+}
+
+void WizDocumentView::applyTheme() {
+    //
+    m_title->applyTheme();
+    m_web->editorResetFont();
+    //
+    if (isDarkMode()) {
+        //
+        setAutoFillBackground(true);
+        setStyleSheet("background-color:#272727;");
+        //
+        m_tab->setAutoFillBackground(true);
+        m_tab->setStyleSheet("background-color:#272727;");
+        //
+        m_wgtEditor->setAutoFillBackground(true);
+        m_wgtEditor->setStyleSheet("background-color:#272727");
+        //
+        titleBar()->setStyleSheet(QString("QWidget{background-color:#272727;} QLineEdit{padding:0px; padding-left:-2px; padding-bottom:1px; border:0px; border-radius:0px;}"));
+        titleBar()->setAutoFillBackground(true);
+    } else {
+        setAutoFillBackground(true);
+        setStyleSheet("background-color:#f5f5f5;");
+        //
+        m_tab->setAutoFillBackground(true);
+        m_tab->setStyleSheet("background-color:#f5f5f5;");
+        //
+        m_wgtEditor->setAutoFillBackground(true);
+        m_wgtEditor->setStyleSheet("background-color:white");
+        //
+        titleBar()->setStyleSheet(QString("QWidget{background-color:#ffffff;} QLineEdit{padding:0px; padding-left:-2px; padding-bottom:1px; border:0px; border-radius:0px;}"));
+        titleBar()->setAutoFillBackground(true);
+    }
 }
 
 QSize WizDocumentView::sizeHint() const
@@ -226,6 +273,8 @@ void WizDocumentView::waitForDone()
     //
     bool done = false;
     m_web->trySaveDocument(m_note, false, [=, &done](const QVariant& ret){
+        //
+        Q_UNUSED(ret);
 
         m_web->waitForDone();
         //
@@ -270,6 +319,7 @@ void WizDocumentView::showEvent(QShowEvent *event)
 void WizDocumentView::resizeEvent(QResizeEvent* ev)
 {
     QWidget::resizeEvent(ev);
+    qDebug() << "oldSize: " << ev->oldSize() << ", newSize: " << ev->size();
 
     m_title->editorToolBar()->adjustButtonPosition();
 }
@@ -291,6 +341,9 @@ void WizDocumentView::onViewNoteRequested(WizDocumentView* view, const WIZDOCUME
 
 void WizDocumentView::onViewNoteLoaded(WizDocumentView* view, const WIZDOCUMENTDATAEX& doc, bool bOk)
 {
+    Q_UNUSED(view);
+    Q_UNUSED(doc);
+    Q_UNUSED(bOk);
 }
 
 bool WizDocumentView::reload()
@@ -319,7 +372,11 @@ void WizDocumentView::initStat(const WIZDOCUMENTDATA& data, bool forceEdit)
             m_bLocked = true;
         }
     } else if (!m_dbMgr.db(data.strKbGUID).canEditDocument(data)) {
-        nLockReason = WizNotifyBar::PermissionLack;
+        if (data.strType.startsWith("lite")) {
+            nLockReason = WizNotifyBar::NotSupport;
+        } else {
+            nLockReason = WizNotifyBar::PermissionLack;
+        }
         m_bLocked = true;
     } else if (WizDatabase::isInDeletedItems(data.strLocation)) {
         nLockReason = WizNotifyBar::Deleted;
@@ -361,6 +418,8 @@ void WizDocumentView::viewNote(const WIZDOCUMENTDATAEX& wizDoc, bool forceEdit)
     //
     m_web->trySaveDocument(m_note, false, [=](const QVariant& ret){
         //
+        Q_UNUSED(ret);
+        //
         WIZDOCUMENTDATAEX data = dataTemp;
 
         if (m_dbMgr.db(m_note.strKbGUID).isGroup())
@@ -382,7 +441,7 @@ void WizDocumentView::viewNote(const WIZDOCUMENTDATAEX& wizDoc, bool forceEdit)
 
             m_tab->setCurrentWidget(m_transitionView);
             downloadNoteFromServer(data);
-
+            //
             return;
         }
 
@@ -409,7 +468,7 @@ void WizDocumentView::viewNote(const WIZDOCUMENTDATAEX& wizDoc, bool forceEdit)
                 m_passwordView->setHint(db.getCertPasswordHint());
                 m_tab->setCurrentWidget(m_passwordView);
                 m_passwordView->setCipherEditorFocus();
-
+                //
                 return;
             }
         }
@@ -422,7 +481,6 @@ void WizDocumentView::viewNote(const WIZDOCUMENTDATAEX& wizDoc, bool forceEdit)
         db.modifyDocumentReadCount(docData);
         docData.tAccessed = WizGetCurrentTime();
         db.modifyDocumentDateAccessed(docData);
-
     });
 }
 
@@ -558,7 +616,6 @@ void WizDocumentView::resetTitle(const QString& strTitle)
 void WizDocumentView::promptMessage(const QString &strMsg)
 {
     m_tab->setCurrentWidget(m_msgWidget);
-
     m_msgLabel->setText(strMsg);
 }
 
@@ -975,7 +1032,12 @@ void WizDocumentView::on_commentWidget_statusChanged()
         int maxWidth = maximumWidth();
         if (!WizIsHighPixel())
         {
+#if (QT_VERSION >= QT_VERSION_CHECK(5, 10, 0))
+            QScreen* screen = QGuiApplication::screenAt(QCursor::pos());
+            if (screen && screen->size().width() < 1440)
+#else
             if (qApp->desktop()->availableGeometry().width() < 1440)
+#endif
             {
                 maxWidth = 916;
             }

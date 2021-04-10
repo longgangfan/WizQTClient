@@ -86,15 +86,15 @@ void WizKMSyncEvents::onVipServiceExpr(WIZGROUPDATA group)
     emit promptVipServiceExpr(group);
 }
 
-void WizKMSyncEvents::onUploadDocument(const QString& strDocumentGUID, bool bDone)
+void WizKMSyncEvents::onUploadDocument(const QString& strTitle, bool bDone)
 {
     if (bDone)
     {
-        onStatus(QObject::tr("Upload document: %1 finished").arg(strDocumentGUID));
+        onStatus(QObject::tr("Upload document: %1 finished").arg(strTitle));
     }
     else
     {
-        onStatus(QObject::tr("Upload document: %1 start").arg(strDocumentGUID));
+        onStatus(QObject::tr("Upload document: %1 start").arg(strTitle));
     }
 }
 
@@ -147,6 +147,8 @@ WizKMSyncThread::~WizKMSyncThread()
 
 void WizKMSyncThread::run()
 {
+    QThread::sleep(10);
+    //
     while (!m_pEvents->isStop())
     {
         m_mutex.lock();
@@ -205,7 +207,7 @@ bool WizKMSyncThread::prepareToken()
     QString token = WizToken::token();
     if (token.isEmpty())
     {
-        Q_EMIT syncFinished(WizToken::lastErrorCode(), WizToken::lastErrorMessage(), isBackground());
+        Q_EMIT syncFinished(WizToken::lastErrorCode(), WizToken::lastIsNetworkError(), WizToken::lastErrorMessage(), isBackground());
         return false;
     }
     //
@@ -301,6 +303,7 @@ public:
     ~CWizKMSyncThreadHelper()
     {
         Q_EMIT m_pThread->syncFinished(m_pThread->m_pEvents->getLastErrorCode()
+                                       , m_pThread->m_pEvents->isNetworkError()
                                        , m_pThread->m_pEvents->getLastErrorMessage()
                                        , m_pThread->isBackground());
         m_pThread->m_pEvents->clearLastErrorMessage();
@@ -309,6 +312,8 @@ public:
 
 bool WizKMSyncThread::syncAll()
 {
+    TOLOG2("client version: %1(%2)", WIZ_CLIENT_TYPE, WIZ_CLIENT_VERSION);
+    //
     m_bNeedSyncAll = false;
     //
     CWizKMSyncThreadHelper helper(this, true);
@@ -356,8 +361,7 @@ bool WizKMSyncThread::quickSync()
             {
                 IWizSyncableDatabase* pGroupDatabase = m_db.getGroupDatabase(group);
                 //
-                WIZUSERINFO userInfo = m_info;
-                userInfo.strKbGUID = group.strGroupGUID;
+                WIZUSERINFO userInfo(m_info, group);
                 //
                 WizKMSync syncGroup(pGroupDatabase, userInfo, WIZKBINFO(), WIZKBVALUEVERSIONS(), m_pEvents, TRUE, TRUE, NULL);
                 //

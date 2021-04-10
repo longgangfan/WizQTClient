@@ -270,7 +270,7 @@ WizDocumentStatusChecker::WizDocumentStatusChecker(QObject* parent)
     //, m_loopCheckTimer(0)
     , m_stop(false)
 {
-
+    Q_UNUSED(parent);
 }
 
 WizDocumentStatusChecker::~WizDocumentStatusChecker()
@@ -292,6 +292,9 @@ void WizDocumentStatusChecker::checkEditStatus(const QString& strKbGUID, const Q
 
 void WizDocumentStatusChecker::stopCheckStatus(const QString& strKbGUID, const QString& strGUID)
 {
+    Q_UNUSED(strKbGUID);
+    Q_UNUSED(strGUID);
+    //
     m_timeOutTimer->stop();
 //    m_loopCheckTimer->stop();
     m_stop = true;
@@ -428,7 +431,7 @@ bool WizDocumentStatusChecker::checkDocumentChangedOnServer(const QString& strKb
         WIZGROUPDATA group;
         if (!WizDatabaseManager::instance()->db().getGroupData(strKbGUID, group))
             return false;
-        userInfo.strKbGUID = group.strGroupGUID;
+        userInfo = WIZUSERINFO(userInfo, group);
     }
     //
     WizKMDatabaseServer server(userInfo);
@@ -445,7 +448,9 @@ bool WizDocumentStatusChecker::checkDocumentChangedOnServer(const QString& strKb
     if (!server.document_getInfo(strGUID, docOnServer))
         return false;
 
-    if ((docOnServer.strGUID == doc.strGUID) && (docOnServer.nVersion > doc.nVersion))
+    if ((docOnServer.strGUID == doc.strGUID)
+            && (docOnServer.nVersion > doc.nVersion)
+            && doc.nVersion > 0) //刚刚上传成功，
     {
         qDebug() << "[Status]New version of note detected , note : " << docOnServer.strTitle << "  local version : " << doc.nVersion << " server version : " << docOnServer.nVersion;
         return true;

@@ -44,7 +44,8 @@ WizIAPDialog::WizIAPDialog(QWidget *parent)
     //
     WizMainWindow* mainWindow = qobject_cast<WizMainWindow *>(WizGlobal::mainWindow());
     if (mainWindow) {
-        ui->webView->addToJavaScriptWindowObject("WizExplorerApp", mainWindow->object());
+        //
+        WizWebEngineView::initWebEngineView(ui->webView, {{"WizExplorerApp", mainWindow->object()}});
     }
 
 

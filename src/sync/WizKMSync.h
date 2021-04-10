@@ -30,7 +30,7 @@ class WizKMSyncEvents : public QObject , public IWizKMSyncEvents
     virtual void onBizNoteCountLimit(IWizSyncableDatabase* pDatabase);
     virtual void onFreeServiceExpr(WIZGROUPDATA group);
     virtual void onVipServiceExpr(WIZGROUPDATA group);
-    virtual void onUploadDocument(const QString& strDocumentGUID, bool bDone);
+    virtual void onUploadDocument(const QString& strTitle, bool bDone);
     virtual void onBeginKb(const QString& strKbGUID);
     virtual void onEndKb(const QString& strKbGUID);
 
@@ -122,7 +122,7 @@ private:
 
 Q_SIGNALS:
     void syncStarted(bool syncAll);
-    void syncFinished(int nErrorCode, const QString& strErrorMesssage, bool isBackground);
+    void syncFinished(int nErrorCode, bool isNetworkError, const QString& strErrorMesssage, bool isBackground);
     void processLog(const QString& strStatus);
     void promptMessageRequest(int nType, const QString& strTitle, const QString& strMsg);
     void bubbleNotificationRequest(const QVariant& param);

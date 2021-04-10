@@ -2,11 +2,13 @@
 
 #include <QDebug>
 #include <QPixmap>
+#include <QMap>
 
 #include "WizMacToolBarDelegate.h"
 #include "WizMacHelper_mm.h"
 #include "WizMacActionHelper.h"
 #include "WizSearchWidget_mm.h"
+#include "share/WizUIBase.h"
 
 
 
@@ -30,7 +32,6 @@
 //    m_image = image;
 //}
 //@end
-
 
 
 WizMacActionHelper::WizMacActionHelper(WizMacToolBarItem* item, QAction* action, QObject* parent)
@@ -95,11 +96,6 @@ public:
         [item setPaletteLabel:[item label]];
         [item setToolTip: WizToNSString(m_action->toolTip())];
 
-        //m_view = [[CWizToolBarActionItemView alloc] init];
-        //[m_view setAutoresizesSubviews: YES];
-        //[m_view setAutoresizingMask: NSViewHeightSizable | NSViewWidthSizable];
-        //[item setView:m_view];
-
         // a reference to and not a copy of the pixmap data.
         QIcon icon = m_action->icon();
         if (!icon.isNull())
@@ -134,13 +130,20 @@ public:
                 [m_item setEnabled: (newEnabled ? YES : NO)];
             }
             //
-//            QIcon icon = m_action->icon();
-            QPixmap pix = m_action->icon().pixmap(m_action->icon().availableSizes().first(), newEnabled ? QIcon::Normal : QIcon::Disabled);
-            //
-            NSImage* img = WizToNSImage(pix);
-            if (img)
-            {
-                [m_item setImage:img];
+            QIcon icon = m_action->icon();
+            if (!icon.isNull()) {
+                QPixmap pix = icon.pixmap(m_action->icon().availableSizes().first(), newEnabled ? QIcon::Normal : QIcon::Disabled);
+                //
+                if (isDarkMode()) {
+                    QColor color = newEnabled ? Qt::white : Qt::darkGray;
+                    pix = qpixmapWithTintColor(pix, color);
+                }
+                //
+                NSImage* img = WizToNSImage(pix);
+                if (img)
+                {
+                    [m_item setImage:img];
+                }
             }
         }
     }
@@ -200,6 +203,7 @@ public:
         , m_strLabel(label)
         , m_strTooltip(tooltip)
     {
+        Q_UNUSED(m_delegate);
     }
 
     NSView* view() { return m_container->cocoaView(); }
@@ -255,6 +259,7 @@ public:
         , m_strTooltip(tooltip)
         , m_width(width)
     {
+        Q_UNUSED(m_delegate);
     }
 private:
     CWizMacToolBarDelegate* m_delegate;
@@ -382,9 +387,10 @@ NSMutableArray *itemIdentifiers(const QList<WizMacToolBarItem *> *items, bool cu
 
 - (void)controlTextDidEndEditing:(NSNotification *)aNotification
 {
-    NSWindow* window1 = [[NSApp windows] objectAtIndex:0];
-    NSWindow* window2 = [[NSApp windows] objectAtIndex:1];
-    NSWindow* window3 = [NSApp mainWindow];
+    Q_UNUSED(aNotification);
+//    NSWindow* window1 = [[NSApp windows] objectAtIndex:0];
+//    NSWindow* window2 = [[NSApp windows] objectAtIndex:1];
+//    NSWindow* window3 = [NSApp mainWindow];
     //NSWindow* window4 = [self window];
 
 //    [[self window] makeFirstResponder:[self window]];
@@ -395,7 +401,8 @@ NSMutableArray *itemIdentifiers(const QList<WizMacToolBarItem *> *items, bool cu
 - (BOOL) control:(NSControl *)control textShouldEndEditing:(NSText *)fieldEditor
 //- (BOOL) textShouldEndEditing:(NSText *) textObject;
 {
-    //Q_UNUSED(control);
+    Q_UNUSED(control);
+    Q_UNUSED(fieldEditor);
     //
     if (!m_toolbar)
         return YES;

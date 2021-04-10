@@ -12,6 +12,7 @@
 #include "WizMainWindow.h"
 #include "WizDocumentWebView.h"
 #include "WizDocumentWebEngine.h"
+#include "share/WizQtHelper.h"
 
 WizTitleEdit::WizTitleEdit(QWidget *parent)
     : QLineEdit(parent)
@@ -28,8 +29,17 @@ WizTitleEdit::WizTitleEdit(QWidget *parent)
     connect(this, SIGNAL(textEdited(QString)), SLOT(onTextEdit(QString)));
     connect(this, SIGNAL(textChanged(QString)), SLOT(onTextChanged(QString)));
     QFont f = font();
-    f.setPixelSize(14);
+    f.setPixelSize(WizSmartScaleUI(14));
     setFont(f);
+}
+
+void WizTitleEdit::applyTheme()
+{
+    if (isDarkMode()) {
+        setStyleSheet("color:#a6a6a6;background-color:#272727");
+    } else {
+        setStyleSheet("color:#535353;");
+    }
 }
 
 QSize WizTitleEdit::sizeHint() const
@@ -228,7 +238,7 @@ void WizTitleEdit::setText(const QString& text)
 {
     QLineEdit::setText(text);
     setCursorPosition(0);
-    setStyleSheet("color:#535353;");
+    applyTheme();
 }
 
 void WizTitleEdit::onTitleReturnPressed()
@@ -272,4 +282,5 @@ void WizTitleEdit::onTextEdit(const QString& text)
 
 void WizTitleEdit::onTextChanged(const QString& text)
 {    
+    Q_UNUSED(text);
 }

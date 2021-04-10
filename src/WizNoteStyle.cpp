@@ -74,7 +74,7 @@ public:
 };
 
 
-const int IMAGE_WIDTH = 80;
+//const int IMAGE_WIDTH = 80;
 
 CWizNoteStyle::CWizNoteStyle(const QString& strSkinName)
 {
@@ -82,22 +82,12 @@ CWizNoteStyle::CWizNoteStyle(const QString& strSkinName)
     {
         QString strSkinPath = ::WizGetSkinResourcePath(strSkinName);
 
-        bool bHightPixel = WizIsHighPixel();
-        QString strIconName = bHightPixel ? "branch_expanded@2x.png" : "branch_expanded.png";
-        m_expandedImage.load(strSkinPath + strIconName);
-        strIconName = bHightPixel ? "branch_collapsed@2x.png" : "branch_collapsed.png";
-        m_collapsedImage.load(strSkinPath + strIconName);
-        strIconName = bHightPixel ? "branch_expandedSelected@2x.png" : "branch_expandedSelected.png";
-        m_expandedImageSelected.load(strSkinPath + strIconName);
-        strIconName = bHightPixel ? "branch_collapsedSelected@2x.png" : "branch_collapsedSelected.png";
-        m_collapsedImageSelected.load(strSkinPath + strIconName);
-        m_imgDefaultAvatar.load(strSkinPath + "avatar_default.png");
-
-        //m_iconDocumentsBadge = ::WizLoadSkinIcon(strSkinName, "document_badge");
-        //m_iconDocumentsBadgeEncrypted = ::WizLoadSkinIcon(strSkinName, "document_badge_encrypted");
-
-//        m_multiLineListSelectedItemBackground.SetImage(strSkinPath + "multilinelist_selected_background.png", QPoint(4, 4));
-//        m_multiLineListSelectedItemBackgroundHot.SetImage(strSkinPath + "multilinelist_selected_background_hot.png", QPoint(4, 4));
+        m_expandedImage = Utils::WizStyleHelper::loadPixmap("branch_expanded").toImage();
+        m_collapsedImage = Utils::WizStyleHelper::loadPixmap("branch_collapsed").toImage();
+        m_expandedImageSelected = Utils::WizStyleHelper::loadPixmap("branch_expandedSelected").toImage();
+        m_collapsedImageSelected = Utils::WizStyleHelper::loadPixmap("branch_collapsedSelected").toImage();
+        m_imgDefaultAvatar = Utils::WizStyleHelper::loadPixmap("avatar_default").toImage();
+        //
         m_imagePushButton.setImage(strSkinPath + "imagepushbutton.png", QPoint(4, 4));
         m_imagePushButtonHot.setImage(strSkinPath + "imagepushbutton_hot.png", QPoint(4, 4));
         m_imagePushButtonPressed.setImage(strSkinPath + "imagepushbutton_pressed.png", QPoint(4, 4));
@@ -156,7 +146,7 @@ void CWizNoteStyle::drawMultiLineListWidgetItem(const QStyleOptionViewItem *vopt
     p->setClipRect(vopt->rect);
 
     QRect textLine = vopt->rect;
-    textLine.adjust(14, 0, 0, 0);
+    textLine.adjust(WizSmartScaleUI(14), 0, 0, 0);
     p->setPen(Utils::WizStyleHelper::listViewItemSeperator());
     p->drawLine(textLine.bottomLeft(), textLine.bottomRight());
 
@@ -171,35 +161,21 @@ void CWizNoteStyle::drawMultiLineListWidgetItem(const QStyleOptionViewItem *vopt
         QRect imageRect = textRect;
         if (imageAlignLeft)
         {
-            imageRect.setRight(imageRect.left() + imageWidth + 14);
-            textRect.setLeft(imageRect.right() + 12);
-            imageRect.setRight(imageRect.right() + 14);
+            imageRect.setRight(imageRect.left() + imageWidth + WizSmartScaleUI(14));
+            textRect.setLeft(imageRect.right() + WizSmartScaleUI(12));
+            imageRect.setRight(imageRect.right() + WizSmartScaleUI(14));
         }
         else
         {
-            imageRect.setLeft(imageRect.right() - imageWidth - 14);
-            textRect.setRight(imageRect.left() - 12);
-            imageRect.setLeft(imageRect.left() - 12);
+            imageRect.setLeft(imageRect.right() - imageWidth - WizSmartScaleUI(14));
+            textRect.setRight(imageRect.left() - WizSmartScaleUI(12));
+            imageRect.setLeft(imageRect.left() - WizSmartScaleUI(12));
         }
 
-//        int imgWidth = WizIsHighPixel() ? img.width() / 2 : img.width();
-//        int imgHeight = WizIsHighPixel() ? img.height() / 2 : img.height();
-//        if (imgWidth > imageRect.width() || imgHeight > imageRect.height())
-//        {
-//            double fRate = std::min<double>(double(imageRect.width()) / imgWidth, double(imageRect.height()) / imgHeight);
-//            int newWidth = int(imgWidth * fRate);
-//            int newHeight = int(imgHeight * fRate);
-//            //
-//            int adjustX = (imageRect.width() - newWidth) / 2;
-//            int adjustY = (imageRect.height() - newHeight) / 2;
-//            imageRect.adjust(adjustX, adjustY, -adjustX, -adjustY);
-//        }
-//        else
-//        {
-            int adjustX = (imageRect.width() - imageWidth) / 2;
-            int adjustY = (imageRect.height() - imageWidth) / 2;
-            imageRect.adjust(adjustX, adjustY, -adjustX, -adjustY);
-//        }
+        int adjustX = (imageRect.width() - imageWidth) / 2;
+        int adjustY = (imageRect.height() - imageWidth) / 2;
+        imageRect.adjust(adjustX, adjustY, -adjustX, -adjustY);
+        //
         p->drawPixmap(imageRect, img);
     }
 
@@ -220,15 +196,17 @@ void CWizNoteStyle::drawMultiLineListWidgetItem(const QStyleOptionViewItem *vopt
     }
 
     QFont font = p->font();
-    font.setPixelSize(12);
-    p->setFont(font);
     QFontMetrics fm(font);
 
-    textRect.adjust(0, 3, -8, -8);
+    textRect.adjust(0, WizSmartScaleUI(3), WizSmartScaleUI(-8), WizSmartScaleUI(-8));
     bool selected = vopt->state.testFlag(State_Selected);
-    int lineHeight = fm.height() + 2;
+    int lineHeight = fm.height() + WizSmartScaleUI(2);
 
     QColor color("#535353");
+    if (isDarkMode()) {
+        color = QColor("#AAAAAA");
+    }
+    //
     for (int line = 0; line < wrapTextLineText && line < lineCount; line++)
     {        
         CString strText = view->itemText(vopt->index, line);
@@ -236,7 +214,7 @@ void CWizNoteStyle::drawMultiLineListWidgetItem(const QStyleOptionViewItem *vopt
         QRect rc = textRect;
         rc.setTop(rc.top() + line * lineHeight);
         rc.setHeight(lineHeight);
-        rc.setWidth(190);
+        rc.setWidth(WizSmartScaleUI(190));
         ::WizDrawTextSingleLine(p, rc, strText,  Qt::TextSingleLine | Qt::AlignVCenter, color, true);
     }
 
@@ -336,6 +314,8 @@ void CWizNoteStyle::drawControl(ControlElement element, const QStyleOption *opti
             }
             else if (const WizDocumentListView *view = dynamic_cast<const WizDocumentListView *>(widget))
             {
+                //QSize sz = view->size();
+                //QRect rc = vopt->rect;
 //                qDebug() << "view left top : " << view->mapToGlobal(view->rect().topLeft());
                 view->drawItem(painter, vopt);
                 //drawDocumentListViewItem(vopt, painter, view);
@@ -400,9 +380,9 @@ void CWizNoteStyle::drawPrimitive(PrimitiveElement pe, const QStyleOption *opt, 
                 if (opt->state & QStyle::State_Children) {
                     bool bExpanded = (opt->state & QStyle::State_Open) ? true : false;
                     if ((opt->state & QStyle::State_Selected)) {        //(opt->state & State_HasFocus)
-                        drawcenterImage(p, bExpanded ? m_expandedImageSelected : m_collapsedImageSelected, opt->rect.adjusted(8, 0, 0, 0));
+                        drawcenterImage(p, bExpanded ? m_expandedImageSelected : m_collapsedImageSelected, opt->rect.adjusted(0, 0, 0, 0));
                     } else {
-                        drawcenterImage(p, bExpanded ? m_expandedImage : m_collapsedImage, opt->rect.adjusted(8, 0, 0, 0));
+                        drawcenterImage(p, bExpanded ? m_expandedImage : m_collapsedImage, opt->rect.adjusted(0, 0, 0, 0));
                     }
                 }
                 return;
@@ -529,9 +509,11 @@ private:
 protected:
     virtual void drawControl(ControlElement element, const QStyleOption *option, QPainter *painter, const QWidget *widget) const
     {
+        Q_UNUSED(widget);
         switch (element)
         {
         case CE_PushButton:
+        case CE_PushButtonBevel:
             {
                 const QStyleOptionButton* vopt = qstyleoption_cast<const QStyleOptionButton *>(option);
                 ATLASSERT(vopt);

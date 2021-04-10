@@ -19,9 +19,11 @@ class QShortcut;
 #define WIZACTION_GLOBAL_GOBACK  "actionGoBack"
 #define WIZACTION_GLOBAL_SAVE_AS_PDF        "actionSaveAsPDF"
 #define WIZACTION_GLOBAL_SAVE_AS_HTML        "actionSaveAsHtml"
+#define WIZACTION_GLOBAL_SAVE_AS_MARKDOWN    "actionSaveAsMarkdown"
 #define WIZACTION_GLOBAL_IMPORT_FILE            "actionImportFile"
 #define WIZACTION_GLOBAL_PRINT_MARGIN        "actionPrintMargin"
 #define WIZACTION_GLOBAL_TOGGLE_CATEGORY    "actionViewToggleCategory"
+#define WIZACTION_GLOBAL_SHOW_SUB_FOLDER_DOCUMENTS      "actionViewShowSubFolderDocuments"
 #define WIZACTION_GLOBAL_TOGGLE_FULLSCREEN  "actionViewToggleFullscreen"
 
 #define WIZACTION_EDITOR_UNDO               "actionEditingUndo"

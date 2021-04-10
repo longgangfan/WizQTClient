@@ -44,7 +44,6 @@ public:
 
 
         painter->save();
-        painter->setPen(Qt::black);
         if ((option.state & QStyle::State_Selected))
         {
             painter->setPen(Qt::NoPen);
@@ -66,7 +65,6 @@ public:
 WizSuggestCompletionon::WizSuggestCompletionon(WizSearchView *parent)
     : QObject(parent)
     , m_editor(parent)
-    , m_popupWgtWidth(WizIsHighPixel() ? HIGHPIXSEARCHWIDGETWIDTH : NORMALSEARCHWIDGETWIDTH)
     , m_usable(true)
     , m_searcher(new WizSuggestionSeacher(this))
     , m_editing(false)
@@ -79,11 +77,8 @@ WizSuggestCompletionon::WizSuggestCompletionon(WizSearchView *parent)
     m_popupWgt->setMouseTracking(true);
     m_popupWgt->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Minimum);
 
-    resetContainerSize(m_popupWgtWidth, 170);
-
     m_treeWgt = new WizSuggestiongList;
     m_treeWgt->setFixedHeight(134);
-    m_treeWgt->setFixedWidth(m_popupWgtWidth);
     m_treeWgt->setFocusPolicy(Qt::NoFocus);
 //    treeWgt->setFocusProxy(popup);
     m_treeWgt->setColumnCount(1);
@@ -98,40 +93,61 @@ WizSuggestCompletionon::WizSuggestCompletionon(WizSearchView *parent)
     m_treeWgt->setMouseTracking(true);
     m_treeWgt->installEventFilter(this);
     m_treeWgt->setAttribute(Qt::WA_MacShowFocusRect, false);
-    m_treeWgt->setStyleSheet("QTreeWidget{ border:0px; outline:0; }  "
-                             "QTreeView::item { color:#AAAAAA; border-left:20px solid #FFFFFF;  margin-left:20px; }");
-    m_treeWgt->header()->setStyleSheet("QHeaderView::section{ background-color:#FFFFFF; height:20px; "
-                                       "border:0px; padding-left:8px; color:#C1C1C1; font-size:12px; }");
-//    m_treeWgt->header()->setMinimumHeight(20);
-//    m_treeWgt->header()->setFixedHeight(26);
+    //
+    if (isDarkMode()) {
+        m_treeWgt->setStyleSheet("QTreeWidget{ border:0px; outline:0; color: #c6c6c6; background-color:#666666;}  "
+                                 "QTreeView::item{background-color:#666666; color:#c6c6c6}  "
+                                 "QTreeView::branch { color:#c6c6c6; border-left:20px solid #666666;  margin-left:20px; }");
+        m_treeWgt->header()->setStyleSheet("QHeaderView:section{ background-color:#666666; height:20px; "
+                                           "border:0px; padding-left:8px; color:#C1C1C1; font-size:12px; }");
+    } else {
+        m_treeWgt->setStyleSheet("QTreeWidget{ border:0px; outline:0; }  "
+                                 "QTreeView::branch { color:#AAAAAA; border-left:20px solid #FFFFFF;  margin-left:20px; }");
+        m_treeWgt->header()->setStyleSheet("QHeaderView:section{ background-color:#FFFFFF; height:20px; "
+                                           "border:0px; padding-left:8px; color:#C1C1C1; font-size:12px; }");
+    }
     WizSuggestionItemDelegate* suggestionDelegate = new WizSuggestionItemDelegate(m_treeWgt);
     m_treeWgt->setItemDelegate(suggestionDelegate);
 
 
-    QPushButton* advancedSearchButton = new QPushButton(m_popupWgt);
-    advancedSearchButton->setFocusPolicy(Qt::NoFocus);
-    advancedSearchButton->setFocusProxy(m_popupWgt);
-    advancedSearchButton->setText(tr("Advanced Search"));
-    advancedSearchButton->setStyleSheet("QPushButton { background-color:#FFFFFF; border-width: 1px; \
-                          padding: 0px 4px; border-style: solid; border-color: #ECECEC; \
-                          border-radius: 2px; border-bottom-color:#E0E0E0; }");
+    m_advancedSearchButton = new QPushButton(m_popupWgt);
+    m_advancedSearchButton->setFocusPolicy(Qt::NoFocus);
+    m_advancedSearchButton->setFocusProxy(m_popupWgt);
+    m_advancedSearchButton->setText(tr("Advanced Search"));
+    if (isDarkMode()) {
+        m_advancedSearchButton->setStyleSheet("QPushButton { background-color:#666666; border-width: 1px; \
+                              padding: 0px 4px; border-style: solid; border-color: #ECECEC; \
+                              border-radius: 2px; border-bottom-color:#E0E0E0; }");
+    } else {
+        m_advancedSearchButton->setStyleSheet("QPushButton { background-color:#FFFFFF; border-width: 1px; \
+                              padding: 0px 4px; border-style: solid; border-color: #ECECEC; \
+                              border-radius: 2px; border-bottom-color:#E0E0E0; }");
+    }
 
-    connect(advancedSearchButton, SIGNAL(clicked(bool)), this, SLOT(on_advanced_buttonClicked()));
+    connect(m_advancedSearchButton, SIGNAL(clicked(bool)), this, SLOT(on_advanced_buttonClicked()));
 
-    QWidget* buttonContainer = new QWidget(m_popupWgt);
-    buttonContainer->setFixedHeight(40);
-    buttonContainer->setStyleSheet("background-color:#F7F7F7; border-top:1px solid #E7E7E7;");
-    QHBoxLayout* buttonLayout = new QHBoxLayout(buttonContainer);
+    m_buttonContainer = new QWidget(m_popupWgt);
+    m_buttonContainer->setFixedHeight(40);
+    if (isDarkMode()) {
+        m_buttonContainer->setStyleSheet("background-color:#666666; border-top:1px solid #666666;");
+    } else {
+
+    }
+    QHBoxLayout* buttonLayout = new QHBoxLayout(m_buttonContainer);
     buttonLayout->setContentsMargins(8, 8, 8, 8);
     buttonLayout->setSpacing(0);
-    buttonContainer->setLayout(buttonLayout);
+    m_buttonContainer->setLayout(buttonLayout);
     buttonLayout->addStretch(0);
-    buttonLayout->addWidget(advancedSearchButton);
+    buttonLayout->addWidget(m_advancedSearchButton);
 
 
     m_infoWgt = new QWidget(m_popupWgt);
     m_infoWgt->setFixedHeight(135);
-    m_infoWgt->setStyleSheet("background-color:#FFFFFF;");
+    if (isDarkMode()) {
+        m_infoWgt->setStyleSheet("background-color:#666666;");
+    } else {
+        m_infoWgt->setStyleSheet("background-color:#FFFFFF;");
+    }
     QVBoxLayout* infoLayout = new QVBoxLayout(m_infoWgt);
     QLabel* label = new QLabel(m_infoWgt);
     label->setText(tr("Suggestion will be showed here"));
@@ -144,7 +160,7 @@ WizSuggestCompletionon::WizSuggestCompletionon(WizSearchView *parent)
     m_popupWgt->setLayout(layout);
     layout->addWidget(m_treeWgt);
     layout->addWidget(m_infoWgt);
-    layout->addWidget(buttonContainer);
+    layout->addWidget(m_buttonContainer);
 
     m_infoWgt->setVisible(false);
 
@@ -170,6 +186,45 @@ WizSuggestCompletionon::WizSuggestCompletionon(WizSearchView *parent)
 WizSuggestCompletionon::~WizSuggestCompletionon()
 {
     delete m_popupWgt;
+}
+
+void WizSuggestCompletionon::applyTheme()
+{
+    if (isDarkMode()) {
+        m_treeWgt->setStyleSheet("QTreeWidget{ border:0px; outline:0; color: #c6c6c6; background-color:#666666;}  "
+                                 "QTreeView::item{background-color:#666666; color:#c6c6c6}  "
+                                 "QTreeView::branch { color:#c6c6c6; border-left:20px solid #666666;  margin-left:20px; }");
+        m_treeWgt->header()->setStyleSheet("QHeaderView:section{ background-color:#666666; height:20px; "
+                                           "border:0px; padding-left:8px; color:#C1C1C1; font-size:12px; }");
+    } else {
+        m_treeWgt->setStyleSheet("QTreeWidget{ border:0px; outline:0; }  "
+                                 "QTreeView::branch { color:#AAAAAA; border-left:20px solid #FFFFFF;  margin-left:20px; }");
+        m_treeWgt->header()->setStyleSheet("QHeaderView:section{ background-color:#FFFFFF; height:20px; "
+                                           "border:0px; padding-left:8px; color:#C1C1C1; font-size:12px; }");
+    }
+
+    if (isDarkMode()) {
+        m_advancedSearchButton->setStyleSheet("QPushButton { background-color:#666666; border-width: 1px; \
+                              padding: 0px 4px; border-style: solid; border-color: #ECECEC; \
+                              border-radius: 2px; border-bottom-color:#E0E0E0; }");
+    } else {
+        m_advancedSearchButton->setStyleSheet("QPushButton { background-color:#FFFFFF; border-width: 1px; \
+                              padding: 0px 4px; border-style: solid; border-color: #ECECEC; \
+                              border-radius: 2px; border-bottom-color:#E0E0E0; }");
+    }
+
+    if (isDarkMode()) {
+        m_buttonContainer->setStyleSheet("background-color:#666666; border-top:1px solid #666666;");
+    } else {
+        m_buttonContainer->setStyleSheet("background-color:transparent; border-top:1px solid #666666;");
+    }
+
+    if (isDarkMode()) {
+        m_infoWgt->setStyleSheet("background-color:#666666;");
+    } else {
+        m_infoWgt->setStyleSheet("background-color:#FFFFFF;");
+    }
+
 }
 
 void WizSuggestCompletionon::setUserSettings(WizUserSettings* settings)
@@ -233,11 +288,18 @@ void WizSuggestCompletionon::setUsable(bool usable)
 void WizSuggestCompletionon::showCompletion(const QStringList &choices, bool isRecentSearches)
 {
 
+    QRect rcEditor = m_editor->globalRect();
+    QPoint bottomLeft = rcEditor.bottomLeft();
+    bottomLeft.setY(bottomLeft.y() + 2);
+    //
+    int width = rcEditor.width();
+
     if (choices.isEmpty())
     {
         m_treeWgt->setVisible(false);
         m_infoWgt->setVisible(true);
         m_popupWgt->setFixedHeight(170);
+        m_popupWgt->setFixedWidth(width);
     }
     else
     {
@@ -259,16 +321,11 @@ void WizSuggestCompletionon::showCompletion(const QStringList &choices, bool isR
         m_treeWgt->adjustSize();
         m_treeWgt->setUpdatesEnabled(true);
 
-        m_treeWgt->setFixedWidth(m_popupWgtWidth);
-        resetContainerSize(m_popupWgtWidth, treeWgtHeight + 35);
+        m_treeWgt->setFixedWidth(width);
+        resetContainerSize(width, treeWgtHeight + 35);
     }
 
-    QPoint bottomLeft(m_popupOffset.width(), -10); // = m_editor->geometry().bottomLeft();
-
-    if (qApp->activeWindow() == nullptr)
-        return;
-
-    m_popupWgt->move(qApp->activeWindow()->mapToGlobal(bottomLeft));
+    m_popupWgt->move(bottomLeft);
     m_popupWgt->setFocus();
     m_treeWgt->setFocus();
     m_treeWgt->setCurrentItem(nullptr);
@@ -303,12 +360,6 @@ QString WizSuggestCompletionon::getCurrentText()
         return m_treeWgt->currentItem()->text(0);
 
     return QString();
-}
-
-void WizSuggestCompletionon::setPopupOffset(int popupWgtWidth, const QSize& offset)
-{
-    m_popupWgtWidth = popupWgtWidth;
-    m_popupOffset = offset;
 }
 
 void WizSuggestCompletionon::doneCompletion()
@@ -432,7 +483,7 @@ void WizSuggestCompletionon::autoSuggest()
 
 void WizSuggestCompletionon::on_advanced_buttonClicked()
 {
-    QString strUrl = WizApiEntry::standardCommandUrl("link");
+    QString strUrl = WizOfficialApiEntry::standardCommandUrl("link");
     strUrl += "&site=www";
     strUrl += "&name=advanced_search.html";
 
@@ -441,6 +492,7 @@ void WizSuggestCompletionon::on_advanced_buttonClicked()
 
 void WizSuggestCompletionon::resetContainerSize(int width, int height)
 {
+    Q_UNUSED(width);
     m_popupWgt->setFixedSize(m_editor->sizeHint().width(), height);
     QRect rect(0, 0, m_editor->sizeHint().width(), height); //= geometry();    
     QRegion region = Utils::WizStyleHelper::borderRadiusRegion(rect);

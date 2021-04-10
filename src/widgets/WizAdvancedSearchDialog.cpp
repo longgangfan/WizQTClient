@@ -27,8 +27,8 @@
 #define PARAM_DATE_AFTER    QObject::tr("After")
 
 #define PARAM_DATE_TODAY              QObject::tr("Today")
-#define PARAM_DATE_YESTODAY         QObject::tr("Yestoday")
-#define PARAM_DATE_DAYBEFOREYESTODAY            QObject::tr("Day before yestoday")
+#define PARAM_DATE_YESTERDAY         QObject::tr("Yesterday")
+#define PARAM_DATE_DAYBEFOREYESTERDAY            QObject::tr("Day before yesterday")
 #define PARAM_DATE_LASTWEEK         QObject::tr("Last week")
 #define PARAM_DATE_LASTMONTH        QObject::tr("Last month")
 #define PARAM_DATE_LASTYEAR         QObject::tr("Last year")
@@ -229,8 +229,8 @@ void WizAdvancedSearchDialog::getDateList(QStringList& dateList)
 {
     dateList.clear();
     dateList.append(PARAM_DATE_TODAY);
-    dateList.append(PARAM_DATE_YESTODAY);
-    dateList.append(PARAM_DATE_DAYBEFOREYESTODAY);
+    dateList.append(PARAM_DATE_YESTERDAY);
+    dateList.append(PARAM_DATE_DAYBEFOREYESTERDAY);
     dateList.append(PARAM_DATE_LASTWEEK);
     dateList.append(PARAM_DATE_LASTMONTH);
     dateList.append(PARAM_DATE_LASTYEAR);
@@ -294,11 +294,11 @@ WizOleDateTime WizAdvancedSearchDialog::getDateTimeByInterval(const QString& str
     {
         dt = dt.addDays(-1);
     }
-    else if (str == PARAM_DATE_YESTODAY)
+    else if (str == PARAM_DATE_YESTERDAY)
     {
         dt = dt.addDays(-2);
     }
-    else if (str == PARAM_DATE_DAYBEFOREYESTODAY)
+    else if (str == PARAM_DATE_DAYBEFOREYESTERDAY)
     {
         dt = dt.addDays(-3);
     }
@@ -484,6 +484,7 @@ void WizSearchParamItem::draw(QPainter* p, const QStyleOptionViewItem* vopt) con
 
 QRect WizSearchParamItem::drawItemBackground(QPainter* p, const QRect& rect, bool selected, bool focused) const
 {
+    Q_UNUSED(focused);
     QBrush brush;
     selected ? brush.setColor(Qt::blue) : brush.setColor(Qt::white);
     brush.setStyle(Qt::SolidPattern);

@@ -181,9 +181,10 @@ public:
     {
         m_bStop = false;
         m_nLastError = 0;
+        m_bIsNetworkError = false;
     }
 
-    virtual void onSyncProgress(int pos) {}
+    virtual void onSyncProgress(int) {}
     virtual HRESULT onText(WizKMSyncProgressMessageType type, const QString& strStatus) = 0;
     virtual HRESULT onMessage(WizKMSyncProgressMessageType type, const QString& strTitle, const QString& strMessage) = 0;
     virtual HRESULT onBubbleNotification(const QVariant& param) = 0;
@@ -191,22 +192,24 @@ public:
     virtual void setStop(bool b) { m_bStop = b; }
     virtual bool isStop() const { return m_bStop; }
     virtual void setLastErrorCode(int nErrorCode) { m_nLastError = nErrorCode; }
+    virtual bool isNetworkError() const { return m_bIsNetworkError; }
+    virtual void setIsNetworkError(bool networkError) { m_bIsNetworkError = networkError; }
     virtual int getLastErrorCode() const { return m_nLastError; }
     virtual void setLastErrorMessage(const QString& message) { m_strLastErrorMessage = message; }
     virtual QString getLastErrorMessage() const { return m_strLastErrorMessage; }
     virtual void clearLastErrorMessage() { m_strLastErrorMessage.clear(); }
-    virtual void setDatabaseCount(int count) {}
-    virtual void setCurrentDatabase(int index) {}
-    virtual void clearLastSyncError(IWizSyncableDatabase* pDatabase) {}
-    virtual void onTrafficLimit(IWizSyncableDatabase* pDatabase) {}
-    virtual void onStorageLimit(IWizSyncableDatabase* pDatabase) {}
-    virtual void onBizServiceExpr(IWizSyncableDatabase* pDatabase) {}
-    virtual void onBizNoteCountLimit(IWizSyncableDatabase* pDatabase) {}
-    virtual void onFreeServiceExpr(WIZGROUPDATA group) {}
-    virtual void onVipServiceExpr(WIZGROUPDATA group) {}
-    virtual void onUploadDocument(const QString& strDocumentGUID, bool bDone) {}
-    virtual void onBeginKb(const QString& strKbGUID) {}
-    virtual void onEndKb(const QString& strKbGUID) {}
+    virtual void setDatabaseCount(int ) {}
+    virtual void setCurrentDatabase(int ) {}
+    virtual void clearLastSyncError(IWizSyncableDatabase* ) {}
+    virtual void onTrafficLimit(IWizSyncableDatabase* ) {}
+    virtual void onStorageLimit(IWizSyncableDatabase* ) {}
+    virtual void onBizServiceExpr(IWizSyncableDatabase* ) {}
+    virtual void onBizNoteCountLimit(IWizSyncableDatabase* ) {}
+    virtual void onFreeServiceExpr(WIZGROUPDATA ) {}
+    virtual void onVipServiceExpr(WIZGROUPDATA ) {}
+    virtual void onUploadDocument(const QString& , bool ) {}
+    virtual void onBeginKb(const QString& ) {}
+    virtual void onEndKb(const QString& ) {}
 
 public:
     void onStatus(const QString& strText) { onText(wizSyncMessageNormal, strText); }
@@ -216,6 +219,7 @@ public:
 private:
     bool m_bStop;
     int m_nLastError;
+    bool m_bIsNetworkError;
     QString m_strLastErrorMessage;
 };
 

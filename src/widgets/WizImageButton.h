@@ -14,24 +14,26 @@ public:
     explicit WizImageButton(QWidget* parent = 0);
 
     void setIcon(const QIcon& icon);
-    void setIconNormal(const QString& icoFile);
-    void setIconHot(const QString& icoFile);
-    void setIconDown(const QString& icoFile);
+    void setIconNormal(const QPixmap& icoFile);
+    void setIconHot(const QPixmap& icoFile);
+    void setIconDown(const QPixmap& icoFile);
 
     void setLockNormalStatus(bool lock);
 
     void setStatusHot();
     void setStatusNormal();
     void setStatusDown();
+    //
+    QSize sizeHint() const override;
 
 signals:
 
 public slots:
 
 protected slots:
-    void paintEvent(QPaintEvent* event);
-    void mousePressEvent(QMouseEvent*  event);
-    void	mouseReleaseEvent(QMouseEvent* event);
+    void paintEvent(QPaintEvent* event) override;
+    void mousePressEvent(QMouseEvent*  event) override;
+    void mouseReleaseEvent(QMouseEvent* event) override;
 
 private:
     QPixmap m_normalIcon;

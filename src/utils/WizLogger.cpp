@@ -10,7 +10,7 @@
 #include <QTextStream>
 #include <iostream>
 #include <fstream>
-#include "WizMisc.h"
+#include "WizMisc_utils.h"
 #include "WizPathResolve.h"
 
 #define LOG_LINES_MAX 30000
@@ -20,8 +20,8 @@
 namespace Utils {
 
 WizLogger::WizLogger()
-    : m_buffer(new QBuffer())
-    , m_mutex(QMutex::Recursive)
+    : m_mutex(QMutex::Recursive)
+    , m_buffer(new QBuffer())
 {
     connect(m_buffer, SIGNAL(readyRead()), SLOT(onBuffer_readRead()));
 }
@@ -40,6 +40,9 @@ void WizLogger::messageHandler(QtMsgType type, const QMessageLogContext& context
     if (msg.startsWith("libpng warning: iCCP:") || msg.startsWith("QSslSocket: cannot call unresolved"))
         return;
 #endif
+
+    if (type == QtWarningMsg && msg.startsWith("Property") && msg.indexOf("has no notify signal") != -1)
+        return;
 
     logger()->saveToLogFile(msg);
     logger()->addToBuffer(msg);
@@ -124,6 +127,8 @@ WizLogger* WizLogger::logger()
 
 void WizLogger::writeLog(const QString& strMsg)
 {
+    if (strMsg.startsWith("[WARNING]: Property "))
+        return;
     logger()->saveToLogFile(strMsg);
     logger()->addToBuffer(strMsg);
 

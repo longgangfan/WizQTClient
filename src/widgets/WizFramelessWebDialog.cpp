@@ -16,8 +16,7 @@ WizFramelessWebDialog::WizFramelessWebDialog(QWidget *parent) :
     setAttribute(Qt::WA_DeleteOnClose);
 
     m_web = new WizWebEngineView(this);
-    //
-    m_web->addToJavaScriptWindowObject("customObject", this);
+    WizWebEngineView::initWebEngineView(m_web, {{"customObject", this}});
     //
     m_frame = m_web->page();
     connect(m_web, SIGNAL(loadFinishedEx(bool)), SLOT(onPageLoadFinished(bool)));
@@ -38,11 +37,13 @@ void WizFramelessWebDialog::loadAndShow(const QString& strUrl)
 void WizFramelessWebDialog::Execute(const QString& strFunction, QVariant param1,
                                               QVariant param2, QVariant param3, QVariant param4)
 {
+    Q_UNUSED(param2);
+    Q_UNUSED(param3);
+    Q_UNUSED(param4);
     if (strFunction == "close")
     {
         ::WizExecuteOnThread(WIZ_THREAD_MAIN, [=]{
             hide();
-            m_web->closeAll();
             //
             QTimer::singleShot(1000, Qt::PreciseTimer, [=]{
                 deleteLater();

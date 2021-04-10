@@ -24,6 +24,8 @@ public:
 
     void shareDocument(const WIZDOCUMENTDATA& doc);
 
+    Q_INVOKABLE void notifyEvent(const QString& event, const QVariant& params);
+
     Q_INVOKABLE void logAction(const QString& strAction);
     Q_INVOKABLE void writeToLog(const QString& strLog);
     Q_INVOKABLE void getToken();
@@ -48,7 +50,7 @@ public:
     Q_PROPERTY(QString shareLinkFirstTips READ getShareLinkFirstTips WRITE setShareLinkFirstTips)
     Q_PROPERTY(QString localLanguage READ getLocalLanguage)
 
-    Q_PROPERTY(QString formateISO8601StringParam WRITE setFormateISO8601StringParam)
+    Q_PROPERTY(QString formateISO8601StringParam READ formateISO8601String WRITE setFormateISO8601StringParam)
     Q_PROPERTY(QString formateISO8601StringResult READ formateISO8601String NOTIFY formateISO8601StringChanged)
 
 public slots:
@@ -63,7 +65,6 @@ private:
     WizUserSettings& m_settings;
     WizWebEngineView* m_view;
     WIZDOCUMENTDATA m_doc;
-    QPropertyAnimation* m_animation;
     QString m_formateISO8601StringParam;
 };
 

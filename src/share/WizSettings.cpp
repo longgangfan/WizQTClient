@@ -1,5 +1,6 @@
 ﻿#include "WizSettings.h"
 #include "utils/WizPathResolve.h"
+#include "WizUIBase.h"
 
 #include "WizDef.h"
 #include <QLocale>
@@ -153,22 +154,40 @@ void WizSettings::setProxyStatus(bool val)
 }
 
 
+#ifndef Q_OS_MAC
+
+bool WizSettings::isDarkMode()
+{
+    return getBool("Common", "DarkMode", false);
+}
+
+void WizSettings::setDarkMode(bool b)
+{
+    setBool("Common", "DarkMode", b);
+}
+
+#endif
+
+
 CString WizGetShortcut(const CString& strName, const CString& strDef /*= ""*/)
 {
     WizSettings settings(Utils::WizPathResolve::globalSettingsFile());
     return settings.getString("Shortcut", strName, strDef);
 }
 
+WizUserSettings* WizUserSettings::s_currentSettings = nullptr;
 
 WizUserSettings::WizUserSettings(const QString& strAccountFolderName)
     : m_strAccountFolderName(strAccountFolderName)
     , m_db(NULL)
 {
+    s_currentSettings = this;
 }
 
 WizUserSettings::WizUserSettings(WizDatabase& db)
     : m_db(&db)
 {
+    s_currentSettings = this;
 }
 
 void WizUserSettings::setAccountFolderName(const QString& strAccountFolderName)
@@ -390,6 +409,7 @@ bool WizUserSettings::showSystemTrayIcon() const
     return true;
 }
 
+
 void WizUserSettings::setShowSystemTrayIcon(bool bShowTrayIcon)
 {
     set("ShowSystemTrayIcon", bShowTrayIcon ? "1" : "0");
@@ -409,6 +429,21 @@ void WizUserSettings::setUseSystemBasedStyle(bool bSystemStyle)
 {
     set("UseSystemBasedStyle", bSystemStyle ? "1" : "0");
 }
+
+bool WizUserSettings::isEnableSpellCheck() const
+{
+    QString strSpellCheck = get("SpellCheck");
+    if (!strSpellCheck.isEmpty()) {
+        return strSpellCheck.toInt() ? true : false;
+    }
+
+    return false;
+}
+void WizUserSettings::setEnableSpellCheck(bool b)
+{
+    set("SpellCheck", b ? "1" : "0");
+}
+
 
 bool WizUserSettings::receiveMobileFile() const
 {
@@ -522,6 +557,11 @@ void WizUserSettings::setRememberNotePasswordForSession(bool remember)
 QString WizUserSettings::editorBackgroundColor()
 {
     QString strColor = get("EditorBackgroundColor");    
+    //
+    if (strColor == WizColorLineEditorBackground.name()) {
+        return "";
+    }
+    //
     return strColor;
 }
 
@@ -529,6 +569,40 @@ void WizUserSettings::setEditorBackgroundColor(const QString& strColor)
 {
     set("EditorBackgroundColor", strColor);
 }
+
+QString WizUserSettings::editorLineHeight()
+{
+    QString strLineHeight = get("EditorLineHeight");
+    //
+    if (strLineHeight.isEmpty()) {
+        return "1.7";
+    }
+    //
+    return strLineHeight;
+}
+
+void WizUserSettings::setEditorLineHeight(const QString& strLineHeight)
+{
+    set("EditorLineHeight", strLineHeight);
+}
+
+
+QString WizUserSettings::editorParaSpacing()
+{
+    QString strLineHeight = get("EditorParaSpacing");
+    //
+    if (strLineHeight.isEmpty()) {
+        return "8";
+    }
+    //
+    return strLineHeight;
+}
+
+void WizUserSettings::setEditorParaSpacing(const QString& spacing)
+{
+    set("EditorParaSpacing", spacing);
+}
+
 
 bool WizUserSettings::isManualSortingEnabled()
 {
@@ -725,6 +799,16 @@ int WizUserSettings::syncGroupMethod() const
 void WizUserSettings::setSyncGroupMethod(int days)
 {
     set("SyncGroupMethod", QString::number(days));
+}
+
+bool WizUserSettings::showSubFolderDocuments()
+{
+    bool b = get("CategoryShowSubFolderDocuments").toInt() ? true : false;
+    return b;
+}
+void WizUserSettings::setShowSubFolderDocuments(bool b)
+{
+    set("CategoryShowSubFolderDocuments", QString::number(b ? 1 : 0));
 }
 
 void WizUserSettings::appendRecentSearch(const QString& search)

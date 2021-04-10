@@ -31,12 +31,12 @@ WizUpgradeChecker::~WizUpgradeChecker()
 
 QString WizUpgradeChecker::getWhatsNewUrl()
 {
-    return WizApiEntry::standardCommandUrl("changelog");
+    return WizOfficialApiEntry::standardCommandUrl("changelog");
 }
 
 void WizUpgradeChecker::checkUpgrade()
 {
-    QString strApiUrl = WizApiEntry::standardCommandUrl("download_server");
+    QString strApiUrl = WizOfficialApiEntry::standardCommandUrl("download_server");
 
     if (!m_net.get()) {
         m_net = std::make_shared<QNetworkAccessManager>();
@@ -85,7 +85,11 @@ void WizUpgradeChecker::_check(const QString& strUrl)
         QDate dateUpgrade(y, m, d);
 
         QFileInfo fi(::WizGetAppFileName());
+#if (QT_VERSION >= QT_VERSION_CHECK(5, 10, 0))
+        QDate dateLocal = fi.birthTime().date();
+#else
         QDate dateLocal = fi.created().date();
+#endif
 
         if (dateUpgrade > dateLocal) {
             TOLOG(QObject::tr("INFO: Upgrade is avaliable, version time: %1").arg(dateUpgrade.toString()));

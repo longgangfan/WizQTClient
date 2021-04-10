@@ -75,7 +75,9 @@ QMutex WizCommonApiEntry::m_mutex(QMutex::Recursive);
 QString _requestUrl(const QString& strUrl)
 {
     QNetworkAccessManager net;
-    QNetworkReply* reply = net.get(QNetworkRequest(strUrl));
+    QNetworkRequest req(strUrl);
+    req.setAttribute(QNetworkRequest::FollowRedirectsAttribute, true);
+    QNetworkReply* reply = net.get(req);
 
     WizAutoTimeOutEventLoop loop(reply);
     loop.exec();
@@ -110,6 +112,9 @@ void WizCommonApiEntry::setEnterpriseServerIP(const QString& strIP)
         if (strIP.startsWith("http"))
         {
             m_server = strIP;
+            if (!m_server.endsWith("/")) {
+                m_server += "/";
+            }
         }
         else
         {
@@ -178,6 +183,9 @@ QString WizCommonApiEntry::newAsServerUrl()
 
 QString WizCommonApiEntry::messageServerUrl()
 {    
+#ifdef QT_DEBUG
+    //return "http://localhost:5001/wizmessage";
+#endif
     return getUrlByCommand(WIZNOTE_API_COMMAND_MESSAGE_SERVER);
 }
 
@@ -197,16 +205,6 @@ QString WizCommonApiEntry::avatarDownloadUrl(const QString& strUserGUID)
     return strUrl;
 }
 
-QString WizCommonApiEntry::searchUrl()
-{
-    QString strUrl = asServerUrl();
-    if (strUrl.isEmpty())
-        return QString();
-
-    strUrl.append("/a/kb/search");
-
-    return strUrl;
-}
 
 
 QString WizCommonApiEntry::avatarUploadUrl()
@@ -220,7 +218,7 @@ QString WizCommonApiEntry::avatarUploadUrl()
     return strUrl;
 }
 
-QString WizCommonApiEntry::mailShareUrl(const QString& strKUrl, const QString& strMailInfo)
+QString WizCommonApiEntry::mailShareUrl(const QString& strKsServer, const QString& strMailInfo)
 {
     // 通过endpoints获得api命令为mail_share，和之前使用的mail_share2不同，需要分开处理
     QString strMailShare = getUrlFromCache("mail_share");
@@ -230,9 +228,7 @@ QString WizCommonApiEntry::mailShareUrl(const QString& strKUrl, const QString& s
         updateUrlCache("mail_share", strMailShare);
     }
 
-    QString strKSServer = strKUrl;
-    //NOTE: 新版服务器修改了获取方法，需要自行将KUrl中的/xmlrpc移除
-    strKSServer.remove("/xmlrpc");
+    QString strKSServer = strKsServer + "/wizks";
     strMailShare.replace("{server_url}", strKSServer);
     strMailShare.append(strMailInfo);
     return strMailShare;
@@ -286,6 +282,20 @@ QString WizCommonApiEntry::shareServer()
     return url;
 }
 
+QString WizCommonApiEntry::shareNoteUrl()
+{
+    QString url = getUrlByCommand("share_url");
+    //
+    QString strStandardParams = QString("&l=%1&v=%2&plat=%3")
+            .arg(LocalLanguage)\
+            .arg(WIZ_CLIENT_VERSION)\
+            .arg(WIZNOTE_API_ARG_PLATFORM);
+    url += strStandardParams;
+
+    return url;
+}
+
+
 QString WizCommonApiEntry::makeUpUrlFromCommand(const QString& strCommand, const QString& strToken)
 {
     QString strExt = QString("token=%1").arg(strToken);
@@ -336,6 +346,8 @@ QString WizCommonApiEntry::appstoreParam(bool useAndSymbol)
     } else {
         strParam = "appstore=1";
     }
+#else
+    Q_UNUSED(useAndSymbol);
 #endif
 
     return strParam;
@@ -347,6 +359,15 @@ QString WizCommonApiEntry::requestUrl(const QString& strCommand)
     QString strUrl = _requestUrl(strRequestUrl);
     return strUrl;
 }
+
+QString WizOfficialApiEntry::appendSrc(QString url)
+{
+    QUrl u(url);
+    QString host = u.host();
+    //
+    return url + "&srcHost=" + host;
+}
+
 
 QString WizCommonApiEntry::makeUpUrlFromCommand(const QString& strCommand)
 {
@@ -362,7 +383,8 @@ QString WizCommonApiEntry::makeUpUrlFromCommand(const QString& strCommand)
             .arg(QHostInfo::localHostName())\
             .arg(WIZNOTE_API_ARG_PLATFORM)\
             .arg("false");
-
+    //
+    strUrl = WizOfficialApiEntry::appendSrc(strUrl);
     return strUrl;
 }
 
@@ -430,39 +452,39 @@ QString WizCommonApiEntry::getUrlByCommand(const QString& strCommand)
     return strUrl;
 }
 
-QString WizApiEntry::analyzerUploadUrl()
+QString WizOfficialApiEntry::analyzerUploadUrl()
 {
     QString analyzerUrl = requestUrl("analyzer");
     return analyzerUrl;
 }
 
-QString WizApiEntry::crashReportUrl()
+QString WizOfficialApiEntry::crashReportUrl()
 {
     QString strUrl = requestUrl("crash_http");
     return strUrl;
 }
 
-QString WizApiEntry::standardCommandUrl(const QString& strCommand)
+QString WizOfficialApiEntry::standardCommandUrl(const QString& strCommand)
 {
     QString strUrl = urlFromCommand(strCommand);
     return strUrl;
 }
 
-QString WizApiEntry::standardCommandUrl(const QString& strCommand, const QString& strToken)
+QString WizOfficialApiEntry::standardCommandUrl(const QString& strCommand, const QString& strToken)
 {
     QString strExt = QString("token=%1").arg(strToken);
     QString strUrl = urlFromCommand(strCommand);
     return addExtendedInfo(strUrl, strExt);
 }
 
-QString WizApiEntry::standardCommandUrl(const QString& strCommand, const QString& strToken, const QString& strExtInfo)
+QString WizOfficialApiEntry::standardCommandUrl(const QString& strCommand, const QString& strToken, const QString& strExtInfo)
 {
     QString strExt = QString("token=%1").arg(strToken) + "&" + strExtInfo;
     QString strUrl = urlFromCommand(strCommand);
     return addExtendedInfo(strUrl, strExt);
 }
 
-QString WizApiEntry::requestUrl(const QString& strCommand)
+QString WizOfficialApiEntry::requestUrl(const QString& strCommand)
 {
     QString strRequestUrl= urlFromCommand(strCommand);
     QString strUrl = _requestUrl(strRequestUrl);
@@ -474,7 +496,7 @@ QString WizApiEntry::requestUrl(const QString& strCommand)
     return strUrl;
 }
 
-QString WizApiEntry::urlFromCommand(const QString& strCommand)
+QString WizOfficialApiEntry::urlFromCommand(const QString& strCommand)
 {
     qsrand((uint)QTime::currentTime().msec());
     QString strUrl = QString(WIZNOTE_API_ENTRY)

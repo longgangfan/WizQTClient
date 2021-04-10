@@ -3,14 +3,14 @@ project(WizNote)
 add_subdirectory(test)
 
 set(wiznote_SOURCES_MAC
-    mac/WizSearchWidget.mm
+    mac/WizSearchWidget_mac.mm
     mac/WizMacHelper.mm
     mac/WizMacToolBar.mm
     mac/WizMacToolBarDelegate.mm
     mac/WizMacActionHelper.cpp
     mac/WizUserInfoWidgetBaseMac.mm
     mac/WizUserInfoWidgetBaseMac_mm.cpp
-    utils/WizNotify.mm
+    utils/WizNotify_mac.mm
     mac/WizIAPHelper.mm
     mac/rmstore/RMAppReceipt.mm
     mac/rmstore/RMStoreAppReceiptVerificator.mm
@@ -42,7 +42,7 @@ set(wiznote_FORMS_MAC
 
 set(wiznote_SOURCES
     utils/WizLogger.cpp
-    utils/WizMisc.cpp
+    utils/WizMisc_utils.cpp
     utils/WizPinyin.cpp
     utils/WizNotify.cpp
     share/WizZip.cpp
@@ -52,13 +52,9 @@ set(wiznote_SOURCES
     share/cppsqlite3.cpp
     share/WizObject.cpp
     share/WizKMCore.cpp
-    share/WizXml.cpp
-    share/WizXmlRpc.cpp
     share/WizGlobal.cpp
-    sync/WizXmlRpcServer.cpp
     share/WizDatabase.cpp
     share/WizDatabaseManager.cpp
-    #share/WizVerifyAccount.cpp
     share/WizSettings.cpp
     share/WizUI.cpp
     share/WizMd5.cpp
@@ -66,7 +62,7 @@ set(wiznote_SOURCES
     share/WizWin32Helper.cpp
     share/WizDrawTextHelper.cpp
     share/WizUIHelper.cpp
-    #share/WizCreateAccount.cpp
+    share/WizUIBase.cpp
     share/WizCommonUI.cpp
     share/WizAnimateAction.cpp
     share/WizPopupWidget.cpp
@@ -186,6 +182,8 @@ set(wiznote_SOURCES
     WizDocTemplateDialog.cpp
     WizMobileFileReceiver.cpp
     WizWebEngineInjectObject.cpp
+    WizCombineNotesDialog.cpp
+    WizSvgEditorDialog.cpp
 
     WizOEMSettings.cpp    
     mac/WizSearchWidget_mm.cpp
@@ -197,6 +195,8 @@ set(wiznote_SOURCES
     main.cpp
     WizInitBizCertDialog.cpp
     share/WizDocumentStyle.cpp
+
+    WizPlugins.cpp
 )
 
 set(wiznote_HEADERS
@@ -208,9 +208,6 @@ set(wiznote_HEADERS
     share/cppsqlite3.h
     share/WizObject.h
     share/WizKMCore.h
-    share/WizXml.h
-    share/WizXmlRpc.h
-    sync/WizXmlRpcServer.h
     share/WizDatabase.h
     share/WizDatabaseManager.h
     share/WizSettings.h
@@ -220,6 +217,7 @@ set(wiznote_HEADERS
     share/WizWin32Helper.h
     share/WizDrawTextHelper.h
     share/WizUIHelper.h
+    share/WizUIBase.h
     share/WizCommonUI.h
     share/WizAnimateAction.h
     share/WizPopupWidget.h
@@ -307,7 +305,7 @@ set(wiznote_HEADERS
     WizDocumentSelectionView.h
     WizUserVerifyDialog.h
     utils/WizLogger.h
-    utils/WizMisc.h
+    utils/WizMisc_utils.h
     utils/WizPinyin.h
     utils/WizNotify.h
     WizMessageListView.h
@@ -362,6 +360,10 @@ set(wiznote_HEADERS
     share/WizThreads_p.h
     WizInitBizCertDialog.h
     share/WizDocumentStyle.h
+    WizCombineNotesDialog.h
+    WizSvgEditorDialog.h
+
+    WizPlugins.h
 )
 
 set(wiznote_FORMS
@@ -387,6 +389,7 @@ set(wiznote_FORMS
     ui/WizExecutingActionDialog.ui
     ui/WizInitBizCertDialog.ui
     ui/WizUserServiceExprDialog.ui
+    ui/WizCombineNotesDialog.ui
 )
 
 set(wiznote_TRANSLATIONS
@@ -435,8 +438,10 @@ if(UNIX)
         find_library(_COCOA_LIBRARY Cocoa)
         find_library(_WEBENGINE_LIBRARY WebEngine)
         find_library(_WEBENGINEWIDGETS_LIBRARY WebEngineWidgets)
+        find_library(_WEBCHANNEL_LIBRARY WebChannel)
         find_library(_STORE_LIBRARY StoreKit)
         find_library(_IO_LIBRARY IOKit)
+        find_package(Qt5Svg)
         if (PLCrashReporter)
             find_library(_CRASHREPORTER CrashReporter)
         endif(PLCrashReporter)
@@ -463,6 +468,8 @@ if(UNIX)
     elseif(NOT APPLE)
         add_executable(WizNote ${wiznote_SOURCES} ${wiznote_HEADERS} ${wiznote_FORM_HEADERS} ${wiznote_QM} ${wiznote_RC})
         set_target_properties(${PROJECT_NAME} PROPERTIES AUTOMOC_MOC_OPTIONS "-DQ_OS_LINUX")
+        set_target_properties(${PROJECT_NAME} PROPERTIES LINK_FLAGS "-static-libstdc++ -static-libgcc")
+        find_package(Qt5Svg)
 
         install(TARGETS ${PROJECT_NAME} RUNTIME DESTINATION bin)
         install(DIRECTORY ${CMAKE_SOURCE_DIR}/share/ DESTINATION share/wiznote PATTERN ".DS_Store" EXCLUDE)
@@ -534,7 +541,9 @@ if(UNIX)
 			target_link_libraries(${PROJECT_NAME}
 				quazip
 				cryptlib
+                Qt5::Svg
 				Qt5::WebEngine
+                Qt5::WebChannel
 				Qt5::WebEngineWidgets
 				${CMAKE_SOURCE_DIR}/lib/openssl/lib/libcrypto.a
 				${CMAKE_SOURCE_DIR}/lib/openssl/lib/libssl.a
@@ -544,7 +553,9 @@ if(UNIX)
 			target_link_libraries(${PROJECT_NAME}
 				quazip
 				cryptlib
-				Qt5::WebEngine
+                Qt5::Svg
+                Qt5::WebEngine
+                Qt5::WebChannel
 				Qt5::WebEngineWidgets
 				${CMAKE_SOURCE_DIR}/lib/openssl/lib/libcrypto.a
 				${CMAKE_SOURCE_DIR}/lib/openssl/lib/libssl.a
@@ -557,7 +568,9 @@ if(UNIX)
                         X11
 			quazip
 			cryptlib
-			Qt5::WebEngine
+            Qt5::Svg
+            Qt5::WebEngine
+            Qt5::WebChannel
 			Qt5::WebEngineWidgets
 			${CMAKE_DL_LIBS}
 		)
@@ -566,7 +579,9 @@ else(NOT UNIX)
 	target_link_libraries(${PROJECT_NAME}
 		quazip
 		cryptlib
-		Qt5::WebEngine
+        Qt5::Svg
+        Qt5::WebEngine
+        Qt5::WebChannel
 		Qt5::WebEngineWidgets
 		${CMAKE_DL_LIBS}
                 Qt5::WinMain

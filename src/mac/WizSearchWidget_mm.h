@@ -11,8 +11,10 @@ QT_BEGIN_NAMESPACE
 class QLineEdit;
 class QTimer;
 class QTreeWidget;
+class QPushButton;
 class WizUserSettings;
 QT_END_NAMESPACE
+
 
 class WizSuggestCompletionon;
 
@@ -51,10 +53,12 @@ public:
     void moveCompleter(bool up);
     QString getCurrentCompleterText();
 
-    void setPopupWgtOffset(int popupWgtWidth, const QSize& offset);
-
     void setSizeHint(QSize sizeHint);
     virtual QSize sizeHint() const;
+    QRect globalRect();
+
+    //
+    void applyTheme();
 
 public Q_SLOTS:
     void on_search_editFinished(const QString& strText);
@@ -119,8 +123,8 @@ public:
     void selectSuggestItem(bool up);
     QString getCurrentText();
     void updatePlaceHolder();
-
-    void setPopupOffset(int popupWgtWidth, const QSize& offset);
+    //
+    void applyTheme();
 
 public slots:
     void showCompletion(const QStringList &choices, bool isRecentSearches);
@@ -143,14 +147,14 @@ private:
     QWidget *m_infoWgt;
     QTreeWidget *m_treeWgt;
     QTimer *m_timer;
-    QSize m_popupOffset;
-    int m_popupWgtWidth;
     bool m_usable;
     QString m_strCurrentKbGuid;
     bool m_editing;
     bool m_focused;
 
     WizSuggestionSeacher* m_searcher;
+    QPushButton* m_advancedSearchButton;
+    QWidget* m_buttonContainer;
 
     WizUserSettings* m_settings;
 };

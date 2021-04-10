@@ -48,8 +48,6 @@ struct WIZDATABASEINFO
 };
 
 
-class WizXmlRpcStructValue;
-
 struct WIZOBJECTBASE
 {
     QString strKbGUID;
@@ -61,7 +59,6 @@ struct WIZUSERINFOBASE
 {
     QString strToken;
     QString strKbGUID;
-    QString strXmlRpcServer;
     QString strKbServer;
 
     //NOTE: DEPRECATED
@@ -76,10 +73,13 @@ struct WIZUSERINFOBASE
 // use 10 minutes locally, server use 20 minutes
 #define TOKEN_TIMEOUT_INTERVAL 60 * 10
 
+struct WIZGROUPDATA;
+
 struct WIZUSERINFO : public WIZUSERINFOBASE
 {
     WIZUSERINFO();
     WIZUSERINFO(const WIZUSERINFO& info);
+    WIZUSERINFO(const WIZUSERINFO& info, const WIZGROUPDATA& group);
     bool fromJson(const Json::Value& value);
 
     // field: invite_code, current is 8 length char
@@ -121,8 +121,6 @@ struct WIZUSERINFO : public WIZUSERINFOBASE
     // field: sign up date
     WizOleDateTime tCreated;
     //
-    int syncType;
-    //
     WizOleDateTime tTokenExpried;
 };
 
@@ -136,7 +134,6 @@ Q_DECLARE_METATYPE(WIZUSERINFO)
 struct WIZUSERCERT
 {
     WIZUSERCERT();
-    bool loadFromXmlRpc(WizXmlRpcStructValue& val);
 
     QString strN;
     QString stre;
@@ -184,26 +181,6 @@ struct WIZKBINFO : public WIZOBJECTBASE
     //
 };
 
-
-struct WIZOBJECTPARTDATA : public WIZOBJECTBASE
-{
-    WIZOBJECTPARTDATA();
-    bool loadFromXmlRpc(WizXmlRpcStructValue& data);
-
-    CString strObjectGUID;
-    CString strObjectType;
-    __int64 nStartPos;
-    __int64 nQuerySize;
-
-    __int64 nObjectSize;
-    int bEOF;
-    __int64 nPartSize;
-    CString strPartMD5;
-    QByteArray arrayData;
-};
-
-
-
 enum WizObjectType
 {
     wizobjectError = -1,
@@ -231,7 +208,7 @@ struct WIZTAGDATA : public WIZOBJECTBASE
     CString strDescription;
     WizOleDateTime tModified;
     qint64 nVersion;
-    qint64 nPostion;
+    qint64 nPosition;
 
     friend bool operator< (const WIZTAGDATA& data1, const WIZTAGDATA& data2) throw();
 
@@ -367,6 +344,8 @@ struct WIZDOCUMENTDATA : public WIZOBJECTBASE
     bool isAlwaysOnTop() const { return nFlags & wizDocumentAlwaysOnTop; }
 };
 
+Q_DECLARE_METATYPE(WIZDOCUMENTDATA*)
+
 struct WIZDOCUMENTDATAEX : public WIZDOCUMENTDATA
 {
     WIZDOCUMENTDATAEX();
@@ -374,6 +353,7 @@ struct WIZDOCUMENTDATAEX : public WIZDOCUMENTDATA
 
     WIZDOCUMENTDATAEX& operator= (const WIZDOCUMENTDATAEX& right);
     bool fromJson(const Json::Value& value);
+    QString displayName() const { return strTitle; }
 
     // field: document_tags, guid list
     CWizStdStringArray arrayTagGUID;
@@ -409,6 +389,8 @@ struct WIZDOCUMENTATTACHMENTDATA : public WIZOBJECTBASE
     //
     friend bool operator< (const WIZDOCUMENTATTACHMENTDATA& data1,const WIZDOCUMENTATTACHMENTDATA& data2 ) throw();
     BOOL equalForSync(const WIZDOCUMENTATTACHMENTDATA& data) const;
+    //
+    QString displayName() const { return strName; }
 
     static QString versionName() { return "attachment_version"; }
     static QString objectName() { return "attachment"; }
@@ -509,6 +491,9 @@ struct WIZGROUPDATA
     {
         return bOwn;
     }
+
+    //
+    QString strKbServer;
 
     // field: biz_guid, optional
     // Used for grouping groups

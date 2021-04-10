@@ -5,7 +5,7 @@
 #include <algorithm>
 #include "WizKMCore.h"
 #include "utils/WizLogger.h"
-#include "utils/WizMisc.h"
+#include "utils/WizMisc_utils.h"
 #include "WizMisc.h"
 
 
@@ -321,7 +321,7 @@ bool WizIndex::createTag(const CString& strParentTagGUID,
     data.strDescription = strDescription;
 	data.tModified = WizGetCurrentTime();
     data.nVersion = -1;
-    data.nPostion = 0;
+    data.nPosition = 0;
 
 	return createTagEx(data);
 }
@@ -365,6 +365,8 @@ bool WizIndex::createDocument(const CString& strTitle, const CString& strName, \
                             int nIconIndex, int nSync, int nProtected, WIZDOCUMENTDATA& data)
 {
     Q_UNUSED(strOwner);
+    Q_UNUSED(nIconIndex);
+    Q_UNUSED(nSync);
 
     if (strTitle.isEmpty()) {
         TOLOG("NULL Pointer or Document title is empty: CreateDocument:Title!");
@@ -422,6 +424,8 @@ bool WizIndex::createDocument(const CString& strTitle, const CString& strName, \
                           "", "", data.strType, "", "", "", 0, 0, nProtected, data);
 }
 
+#define ATTACHMENT_MAX_NAME     50
+
 bool WizIndex::createAttachment(const CString& strDocumentGUID, const CString& strName,
                                  const CString& strURL, const CString& strDescription,
                                  const CString& strDataMD5, WIZDOCUMENTATTACHMENTDATA& data)
@@ -435,10 +439,21 @@ bool WizIndex::createAttachment(const CString& strDocumentGUID, const CString& s
         TOLOG("NULL Pointer or name is empty: CreateAttachment!");
         return false;
     }
+    //
+    QString name = strName;
+    if (name.length() > ATTACHMENT_MAX_NAME) {
+        QString ext = Utils::WizMisc::extractFileExt(name);
+        QString title = Utils::WizMisc::extractFileTitle(name);
+        if (ext.length() < ATTACHMENT_MAX_NAME) {
+            name = title.left(ATTACHMENT_MAX_NAME - ext.length()) + ext;
+        } else {
+            name = title.left(ATTACHMENT_MAX_NAME);
+        }
+    }
 
 	data.strGUID = WizGenGUIDLowerCaseLetterOnly();
     data.strDocumentGUID = CString(strDocumentGUID).makeLower();
-    data.strName = strName;
+    data.strName = name;
     data.strDescription = strDescription;
     data.strURL = strURL;
 	data.tInfoModified = WizGetCurrentTime();
@@ -564,8 +579,8 @@ bool WizIndex::deleteTag(const WIZTAGDATA& data, bool bLog, bool bReset /* = tru
 
 bool WizIndex::modifyTagPosition(const WIZTAGDATA& data)
 {
-    CString strSQL = WizFormatString2("update WIZ_TAG set TAG_POS=%1 where TAG_GUID=%2",
-        WizInt64ToStr(data.nPostion),
+    CString strSQL = WizFormatString2("update WIZ_TAG set TAG_POS=%1, WIZ_VERSION=-1 where TAG_GUID=%2",
+        WizInt64ToStr(data.nPosition),
         STR2SQL(data.strGUID));
 
     //
@@ -890,6 +905,7 @@ bool WizIndex::updateDocumentInfoMD5(WIZDOCUMENTDATA& data)
 {
     data.nInfoChanged = 1;
 	data.nVersion = -1;
+    data.tModified = WizGetCurrentTime();   //记录最后修改时间
 
 	return modifyDocumentInfoEx(data);
 }
@@ -1043,6 +1059,67 @@ bool WizIndex::setDocumentTags(WIZDOCUMENTDATA& data,
 	}
 
     return true;
+}
+
+
+bool WizIndex::setDocumentTags2(WIZDOCUMENTDATA& data,
+                                const CWizStdStringArray& arrayTagGUID,
+                                bool bReset /* = true */)
+{
+    CWizStdStringArray arrayTagOld;
+    if (getDocumentTags(data.strGUID, arrayTagOld)) {
+        if (WizKMStringArrayIsEqual<CString>(arrayTagOld, arrayTagGUID))
+            return true;
+    }
+
+    //delete old tags
+    {
+        CString strFormat = formatDeleteSQLFormat(TABLE_NAME_WIZ_DOCUMENT_TAG,
+                                                  "DOCUMENT_GUID");
+
+        CString strSQL;
+        strSQL.format(strFormat,
+            STR2SQL(data.strGUID).utf16()
+            );
+
+        if (!execSQL(strSQL))
+            return false;
+    }
+
+    //
+    //add new tags
+    {
+        CWizStdStringArray::const_iterator it;
+        for (it = arrayTagGUID.begin(); it != arrayTagGUID.end(); it++) {
+            //
+            QString strTagGUID = *it;
+            if (strTagGUID.isEmpty()) {
+                continue;
+            }
+
+            CString strFormat = formatInsertSQLFormat(TABLE_NAME_WIZ_DOCUMENT_TAG,
+                                                      FIELD_LIST_WIZ_DOCUMENT_TAG,
+                                                      PARAM_LIST_WIZ_DOCUMENT_TAG);
+
+            CString strSQL;
+            strSQL.format(strFormat,
+                STR2SQL(data.strGUID).utf16(),
+                STR2SQL(strTagGUID).utf16()
+                );
+
+            if (!execSQL(strSQL))
+                return false;
+        }
+        //
+    }
+    //
+    bool bRet = true;
+    if (bReset)
+        bRet = updateDocumentInfoMD5(data);
+
+    Q_EMIT documentTagModified(data);
+
+    return bRet;
 }
 
 bool WizIndex::getDocumentTags(const CString& strDocumentGUID, CWizStdStringArray& arrayTagGUID)
@@ -2192,7 +2269,7 @@ bool WizIndex::searchDocumentByTitle(const QString& strTitle,
     if (!sqlToDocumentDataArray(strSQL, arrayDocument))
         return false;
 
-    if (arrayDocument.size() > nMaxCount) {
+    if ((int)arrayDocument.size() > nMaxCount) {
         arrayDocument.resize(nMaxCount);
     }
 
@@ -3224,7 +3301,7 @@ bool WizIndex::searchDocumentByWhere(const QString& strWhere, int nMaxCount, CWi
     if (!sqlToDocumentDataArray(strSQL, arrayDocument))
         return false;
 
-    if (arrayDocument.size() > nMaxCount) {
+    if ((int)arrayDocument.size() > nMaxCount) {
         arrayDocument.resize(nMaxCount);
     }
 

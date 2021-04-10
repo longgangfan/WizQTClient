@@ -1,7 +1,7 @@
 ﻿#ifndef WIZSERVICE_WIZAPIENTRY_H
 #define WIZSERVICE_WIZAPIENTRY_H
 
-#define WIZNOTE_API_SERVER      "http://api.wiz.cn/"
+#define WIZNOTE_API_SERVER      "https://api.wiz.cn/"
 
 #include <QString>
 #include <QMap>
@@ -15,12 +15,11 @@ public:
     static QString syncUrl();
     static QString asServerUrl();
     static QString messageServerUrl();
-    static QString searchUrl();
     static QString systemAvatarUrl(const QString& avatarName);
     static QString avatarDownloadUrl(const QString& strUserGUID);
     static QString avatarUploadUrl();
     static QString commentUrlTemplate();
-    static QString mailShareUrl(const QString& strKUrl, const QString& strMailInfo);
+    static QString mailShareUrl(const QString& strKsServer, const QString& strMailInfo);
     static QString accountInfoUrl(const QString& strToken);
     static QString groupAttributeUrl(const QString& strToken, const QString& strKbGUID);
     static QString groupUsersUrl(const QString& strToken, const QString& strBizGUID, const QString& strkbGUID);
@@ -28,6 +27,8 @@ public:
     static QString captchaUrl(const QString& strCaptchaID, int nWidth = 120, int nHeight = 40);
     static QString editStatusUrl();
     static QString shareServer();
+    static QString shareNoteUrl();
+    static QString svgEditorUrl();
 
     //
     static QString makeUpUrlFromCommand(const QString& strCommand);
@@ -57,10 +58,10 @@ private:
     static QMap<QString, QString> m_cacheMap;
 };
 
-class WizApiEntry
+class WizOfficialApiEntry
 {
 public:
-    WizApiEntry();
+    WizOfficialApiEntry();
 
     static QString analyzerUploadUrl();
     static QString crashReportUrl();
@@ -68,6 +69,8 @@ public:
     static QString standardCommandUrl(const QString& strCommand, const QString& strToken);
     static QString standardCommandUrl(const QString& strCommand, const QString& strToken,
                                       const QString& strExtInfo);
+    //
+    static QString appendSrc(QString url);
 
 private:
     static QString requestUrl(const QString& strCommand);

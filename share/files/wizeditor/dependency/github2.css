@@ -1,22 +1,14 @@
 .markdown-body {
-    font-family: Helvetica, "Hiragino Sans GB", "微软雅黑", "Microsoft YaHei UI", SimSun, SimHei, arial, sans-serif;
-    line-height: 1.6;
-    /*background-color: white;*/
     margin: 0 auto;
-    padding: 20px 36px;
+    /* padding: 20px 48px; */
 }
-/*.markdown-body,*/
-/*.markdown-body p,*/
-/*.markdown-body div {*/
-    /*font-size: 15px;*/
-/*}*/
 
 .markdown-body.mobile {
     padding: 0;
 }
 
-.markdown-body > *:first-child {
-    margin-top: 0 !important;
+.markdown-body > p {
+    margin-bottom: 24px;
 }
 
 .markdown-body > *:last-child {
@@ -112,15 +104,15 @@
     /*margin: 1em 0;*/
 /*}*/
 
-.markdown-body p, .markdown-body blockquote, .markdown-body ul, .markdown-body ol,
+/* .markdown-body p, .markdown-body blockquote, .markdown-body ul, .markdown-body ol,
 .markdown-body dl, .markdown-body pre {
-    margin: 10px 0;
-    margin: .83rem 0;
-}
+    margin: 0 0 10px;
+    margin: 0 0 .83rem;
+} */
 
-.markdown-body li {
+/* .markdown-body li {
     margin: 5px 0;
-}
+} */
 
 .markdown-body li.wiz-md-todo-list-item {
     list-style: none;
@@ -171,11 +163,16 @@
 
 .markdown-body pre li {
     margin: 0;
+    padding-left: 8px;
 }
 
-.markdown-body ul, .markdown-body ol {
+/* .markdown-body ul, .markdown-body ol {
     padding-left: 34px;
     padding-left: 2.13rem;
+} */
+.markdown-body td ul, .markdown-body td ol {
+    padding-left: 16px;
+    padding-left: 1rem;
 }
 .markdown-body ul p, .markdown-body ol p{
     margin: 0;
@@ -190,8 +187,8 @@
 }
 
 .markdown-body dl dt {
-    font-size: 10pt;
-    font-size: 0.83rem;
+    /*font-size: 10pt;*/
+    /*font-size: 0.83rem;*/
     font-weight: bold;
     font-style: italic;
     padding: 0;
@@ -224,17 +221,9 @@
 }
 
 .markdown-body blockquote {
-    border-left: 4px solid #dddddd;
+    border-left: 4px solid #ddd;
     padding: 0 12px;
-    color: #aaa;
-}
-
-.markdown-body blockquote > :first-child {
-    margin-top: 0;
-}
-
-.markdown-body blockquote > :last-child {
-    margin-bottom: 0;
+    color: #aaa
 }
 
 .markdown-body table {
@@ -244,7 +233,7 @@
 
 .markdown-body table tr {
     border-top: 1px solid #cccccc;
-    background-color: white;
+    /*background-color: white;*/
     margin: 0;
     padding: 0;
 }
@@ -254,8 +243,8 @@
 }
 
 .markdown-body table tr th {
-    font-size: 10pt;
-    font-size: 0.83rem;
+    /*font-size: 10pt;*/
+    /*font-size: 0.83rem;*/
     font-weight: bold;
     border: 1px solid #cccccc;
     margin: 0;
@@ -266,8 +255,8 @@
     border: 1px solid #cccccc;
     margin: 0;
     padding: 6px 13px;
-    font-size: 10pt;
-    font-size: 0.83rem;
+    /*font-size: 10pt;*/
+    /*font-size: 0.83rem;*/
 }
 
 .markdown-body table tr th :first-child, .markdown-body table tr td :first-child {
@@ -400,10 +389,10 @@
 .markdown-body pre {
     background-color: #f8f8f8;
     border: 1px solid #cccccc;
-    font-size: 10pt;
-    font-size: 0.83rem;
-    line-height: 14pt;
-    line-height: 1.17rem;
+    /*font-size: 10pt;*/
+    /*font-size: 0.83rem;*/
+    /*line-height: 14pt;*/
+    /*line-height: 1.17rem;*/
     overflow: auto;
     padding: 6px 10px;
     border-radius: 3px;
@@ -413,7 +402,7 @@
     background-color: transparent;
     border: 0px;
     font-size: inherit;
-    line-height: inherit;
+    /*line-height: inherit;*/
     overflow: initial;
     padding: 0 4px;
     border-radius: initial;
@@ -547,65 +536,26 @@
 /*}*/
 
 
-@media screen and (max-width: 660px) {
-    .markdown-body {
-        padding: 20px 18px;
-    }
-}
-
-
 @media only screen and (-webkit-max-device-width: 1024px),
 only screen and (-o-max-device-width: 1024px),
 only screen and (max-device-width: 1024px),
 only screen and (-webkit-min-device-pixel-ratio: 3),
 only screen and (-o-min-device-pixel-ratio: 3),
 only screen and (min-device-pixel-ratio: 3) {
-    .markdown-body {
+    /* .markdown-body {
         padding: 12px 15px;
-        /*color: #353c47;*/
     }
-
-    /*.markdown-body,*/
-    /*.markdown-body p,*/
-    /*.markdown-body div {*/
-        /*font-size: 17px;*/
-        /*line-height: 1.7;*/
-    /*}*/
-
-    /*.markdown-body h1 {*/
-        /*font-size: 34px;*/
-    /*}*/
-
-    /*.markdown-body h2 {*/
-        /*font-size: 30px;*/
-    /*}*/
-
-    /*.markdown-body h3 {*/
-        /*font-size: 26px;*/
-    /*}*/
-
-    /*.markdown-body h4 {*/
-        /*font-size: 22px;*/
-    /*}*/
-
-    /*.markdown-body h5 {*/
-        /*font-size: 18px;*/
-    /*}*/
-
-    /*.markdown-body h6 {*/
-        /*color: inherit;*/
-    /*}*/
-
     .markdown-body ul, .markdown-body ol {
         padding-left: 40px;
-    }
+    } */
 
     .markdown-body blockquote {
-        /*border-left: 4px solid #c8d4e8;*/
+        border-left: 4px solid #c8d4e8;
         padding: 0 15px;
-        /*color: #b3c2dd;*/
+        color: #b3c2dd;
     }
 }
+
 
 /*评论页面修正*/
 .comment-list-item .markdown-body {
@@ -616,4 +566,11 @@ only screen and (min-device-pixel-ratio: 3) {
 .markdown-body .wiz-code-container,
 .markdown-body .wiz-table-body {
     padding: 0;
+}
+
+/* 修正 br 高度*/
+p > br {
+    display: block;
+    margin: 0 0 8px;
+    content: " ";
 }

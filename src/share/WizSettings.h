@@ -58,7 +58,11 @@ public:
     void setProxyPassword(const QString& val);
     bool getProxyStatus();
     void setProxyStatus(bool val);
-
+    //
+#ifndef Q_OS_MAC
+    bool isDarkMode();
+    void setDarkMode(bool b);
+#endif
 };
 
 
@@ -72,6 +76,7 @@ enum WizOptionsType
     wizoptionsSkin,
     wizoptionsFont,
     wizoptionsFolders,
+    wizoptionsSpellCheck,
 };
 
 enum WizPositionType
@@ -92,11 +97,13 @@ public:
     // m_strUserId should always 0 if init as this way.
     WizUserSettings(WizDatabase& db);
 
+    static WizUserSettings* currentSettings() { return s_currentSettings; }
 private:
     QString m_strAccountFolderName;
     QString m_strSkinName;
     QString m_strLocale;
     WizDatabase* m_db;
+    static WizUserSettings* s_currentSettings;
 
 public:
     QString get(const QString& key) const;
@@ -136,6 +143,9 @@ public:
     bool useSystemBasedStyle() const;
     void setUseSystemBasedStyle(bool bSystemStyle);
 
+    bool isEnableSpellCheck() const;
+    void setEnableSpellCheck(bool b);
+
     bool receiveMobileFile() const;
     void setReceiveMobileFile(bool bReceiveFile);
 
@@ -163,6 +173,13 @@ public:
     //NOTE:  editor background color string could be empty!!!   if it's empty, editor in seperate window could be grey
     QString editorBackgroundColor();
     void setEditorBackgroundColor(const QString& strColor);
+    //
+
+    QString editorLineHeight();
+    void setEditorLineHeight(const QString& strLineHeight);
+    //
+    QString editorParaSpacing();
+    void setEditorParaSpacing(const QString& strSpacing);
 
     bool isManualSortingEnabled();
     void setManualSortingEnable(bool bEnable);
@@ -201,6 +218,9 @@ public:
     //
     void setLastAttachmentPath(const QString& path);
     QString lastAttachmentPath() const;
+    //
+    bool showSubFolderDocuments();
+    void setShowSubFolderDocuments(bool b);
 };
 
 #endif // WIZSETTINGS_H

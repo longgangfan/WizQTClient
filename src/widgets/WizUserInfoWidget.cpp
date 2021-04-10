@@ -62,25 +62,36 @@ WizUserInfoWidget::WizUserInfoWidget(WizExplorerApp& app, QWidget *parent)
     m_menuMain->addAction(actionAccountSetup);
     m_menuMain->addAction(actionChangeAvatar);
     WizOEMSettings oemSettings(m_db.getAccountPath());
-    if (!oemSettings.isHideBuyVip())
+    if (!oemSettings.isHideBuyVip() && app.userSettings().serverType() != EnterpriseServer)
     {
         WizAccountManager manager(m_app.databaseManager());
-        QAction* actionUpgradeVIP = new QAction(manager.isVip() ? tr("Renewal Vip...") : tr("Upgrade VIP..."), m_menuMain);
+        QAction* actionUpgradeVIP = new QAction(manager.isVip() ? tr("Renew Vip...") : tr("Upgrade VIP..."), m_menuMain);
         connect(actionUpgradeVIP, SIGNAL(triggered()), SLOT(on_action_upgradeVip_triggered()));
         m_menuMain->addAction(actionUpgradeVIP);
     }
     m_menuMain->addSeparator();
     m_menuMain->addAction(actionWebService);
-    if (!oemSettings.isHideMyShare())
-    {
-        QAction* actionMyShare = new QAction(tr("My shared links..."), m_menuMain);
-        connect(actionMyShare, SIGNAL(triggered()), SLOT(on_action_mySharedNotes_triggered()));
-        m_menuMain->addAction(actionMyShare);
-    }
+//    if (!oemSettings.isHideMyShare())
+//    {
+//        QAction* actionMyShare = new QAction(tr("My shared links..."), m_menuMain);
+//        connect(actionMyShare, SIGNAL(triggered()), SLOT(on_action_mySharedNotes_triggered()));
+//        m_menuMain->addAction(actionMyShare);
+//    }
     m_menuMain->addSeparator();
     m_menuMain->addAction(actionLogout);
     //
+#ifndef Q_OS_MAC
+    if (isDarkMode()) {
+        m_menuMain->setStyleSheet("background-color:#272727");
+    }
+#endif
+    //
     setMenu(m_menuMain);
+}
+
+void WizUserInfoWidget::showAccountSettings()
+{
+    on_action_accountSettings_triggered();
 }
 
 void WizUserInfoWidget::resetUserInfo()
@@ -150,13 +161,14 @@ void WizUserInfoWidget::on_action_accountSettings_triggered()
 
 void WizUserInfoWidget::on_action_upgradeVip_triggered()
 {
+    WizMainWindow* window = dynamic_cast<WizMainWindow*>(m_app.mainWindow());
 #ifndef BUILD4APPSTORE
     QString strToken = WizToken::token();
     QString extInfo = WizCommonApiEntry::appstoreParam(false);
     QString strUrl = WizCommonApiEntry::makeUpUrlFromCommand("vip", strToken, extInfo);
-    QDesktopServices::openUrl(strUrl);
+    WizShowWebDialogWithToken(tr("Account settings"), strUrl, window);
+    //QDesktopServices::openUrl(strUrl);
 #else
-    WizMainWindow* window = dynamic_cast<WizMainWindow*>(m_app.mainWindow());
     WizIAPDialog* dlg = window->iapDialog();
     dlg->loadIAPPage();
     dlg->exec();
@@ -265,6 +277,7 @@ QPixmap WizUserInfoWidget::getCircleAvatar(int width, int height)
 
 QPixmap WizUserInfoWidget::getAvatar(int width, int height)
 {
+    Q_UNUSED(height);
     return getCircleAvatar(width, width);
 }
 
@@ -276,7 +289,7 @@ QIcon WizUserInfoWidget::getVipIcon()
 QSize WizUserInfoWidget::sizeHint() const
 {
     // FIXME: builtin avatar size (36, 36), margin = 4 * 2, arraw width = 10
-    int vipIconWidth = 35;
-    return QSize(36+ textWidth() + 8 + vipIconWidth, 36);
+    int vipIconWidth = WizSmartScaleUI(35);
+    return QSize(WizSmartScaleUI(36)+ textWidth() + WizSmartScaleUI(8) + vipIconWidth, WizSmartScaleUI(36));
 }
 

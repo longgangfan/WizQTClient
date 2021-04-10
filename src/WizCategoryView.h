@@ -15,6 +15,10 @@ class WizProgressDialog;
 class WizObjectDownloaderHost;
 class WizFolderSelector;
 
+namespace Json {
+    class Value;
+}
+
 #define CATEGORY_MESSAGES_ALL               QObject::tr("Message Center")
 #define CATEGORY_MESSAGES_SEND_TO_ME        QObject::tr("Send to me")
 #define CATEGORY_MESSAGES_MODIFY            QObject::tr("Note modified")
@@ -42,6 +46,7 @@ public:
 
     void saveSelection();
     void restoreSelection();
+    void clearStoredSelection() { m_selectedItem = nullptr; }
 
     WizCategoryViewItemBase* itemAt(const QPoint& p) const;
     WizCategoryViewItemBase* itemFromKbGUID(const QString& strKbGUID) const;
@@ -61,7 +66,7 @@ public:
     bool isCursorEntered() const { return m_cursorEntered; }
 
     QPoint hitPoint() const { return m_hitPos; }
-
+    //
 protected:
     virtual void mousePressEvent(QMouseEvent* event);
     virtual void mouseReleaseEvent(QMouseEvent* event);
@@ -73,7 +78,7 @@ protected:
     virtual void dropEvent(QDropEvent* event);
     //
     bool dropOn(QDropEvent *event, int *dropRow, int *dropCol, QModelIndex *dropIndex);
-    void dropEventCore(QDropEvent *event);
+    QTreeWidgetItem* dropEventCore(QDropEvent *event);
     bool droppingOnItself(QDropEvent *event, const QModelIndex &index);
     QAbstractItemView::DropIndicatorPosition position(const QPoint &pos, const QRect &rect, const QModelIndex &index) const;
 
@@ -93,6 +98,8 @@ protected:
     WizExplorerApp& m_app;
     WizDatabaseManager& m_dbMgr;
     QTreeWidgetItem* m_selectedItem;
+    //
+    friend class WizCategoryViewGroupRootItem;
 
 
 protected Q_SLOTS:
@@ -177,7 +184,6 @@ public:
         ActionCopyItem,
         ActionRenameItem,
         ActionDeleteItem,
-        ActionRecovery,
         ActionItemAttribute,
         ActionEmptyTrash,
         ActionQuitGroup,
@@ -233,6 +239,8 @@ public:
     bool isSectionVisible(CategorySection section) const;
     void loadSectionStatus();
 
+    void applyTheme();
+
 public:
     WizCategoryViewItemBase* findFolder(const WIZDOCUMENTDATA& doc);
 
@@ -258,7 +266,7 @@ public:
     void saveGroupTagsPosition(WizDatabase& db, WizCategoryViewGroupItem* pItem);
 
     QString getAllFoldersPosition();
-    QString getAllFoldersPosition(WizCategoryViewFolderItem* pItem, int& nStartPos);
+    void getAllFoldersPosition(WizCategoryViewFolderItem* pItem, int& nStartPos, Json::Value& jValue);
 
     // tags
     WizCategoryViewTagItem* findTag(const WIZTAGDATA& tag, bool create, bool sort);
@@ -370,12 +378,14 @@ public Q_SLOTS:
 
     void on_action_newItem();
     void on_action_user_newFolder();
-    void on_newFolder_inputText_changed(const QString& text);
+    void on_newFolder_inputText_changed(QString text);
     void on_action_user_newFolder_confirmed(int result);
     void on_action_user_newTag();
     void on_action_user_newTag_confirmed(int result);
+    void on_newTag_inputText_changed(const QString& text);
     void on_action_group_newFolder();
     void on_action_group_newFolder_confirmed(int result);
+    void on_group_newFolder_inputText_changed(const QString& text);
 
     void on_action_moveItem();
     void on_action_user_moveFolder();
@@ -409,8 +419,6 @@ public Q_SLOTS:
     void on_action_user_deleteTag_confirmed(int result);
     void on_action_group_deleteFolder();
     void on_action_group_deleteFolder_confirmed(int result);
-
-    void on_action_deleted_recovery();
 
     void on_action_itemAttribute();
     void on_action_groupAttribute();
@@ -562,7 +570,7 @@ private:
     void resetFolderLocation(WizCategoryViewFolderItem* item);
     void resetFolderLocation(WizCategoryViewFolderItem* item, const QString& strNewLocation);
     bool renameFolder(WizCategoryViewFolderItem* item, const QString& strFolderName);
-    bool renameGroupFolder(WizCategoryViewGroupItem* pGroup, const QString& strFolderName);
+    bool renameGroupFolder(WizCategoryViewGroupItem* pGroup, CString strFolderName);
     //
     void updateShortcut(int type, const QString& keyValue, const QString& name);
     void removeShortcut(int type, const QString& keyValue);
@@ -598,6 +606,7 @@ private:
     QString m_strRequestedGroupKbGUID;
 
     QString m_strSelectedId;
+    bool m_renamingFolder;
 
 };
 

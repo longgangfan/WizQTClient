@@ -11,7 +11,7 @@
 
 #include "WizDef.h"
 #include "utils/WizStyleHelper.h"
-#include "utils/WizMisc.h"
+#include "utils/WizMisc_utils.h"
 #include "utils/WizLogger.h"
 #include "share/WizDrawTextHelper.h"
 #include "share/WizSettings.h"
@@ -40,12 +40,14 @@
 #include "WizWebSettingsDialog.h"
 #include "WizFileImporter.h"
 #include "WizOEMSettings.h"
+#include "share/jsoncpp/json/json.h"
 
 
 #define CATEGORY_GENERAL    QObject::tr("General")
 #define CATEGORY_TEAM_GROUPS QObject::tr("Team Notes")
 #define CATEGORY_SHORTCUTS  QObject::tr("Shortcuts")
 #define CATEGORY_SEARCH     QObject::tr("Quick Search")
+#define CATEGORY_MYSHARES   QObject::tr("Shared Notes")
 #define CATEGORY_FOLDERS    QObject::tr("Folders")
 #define CATEGORY_TAGS       QObject::tr("Tags")
 #define CATEGORY_STYLES     QObject::tr("Styles")
@@ -137,13 +139,13 @@ WizCategoryBaseView::WizCategoryBaseView(WizExplorerApp& app, QWidget* parent)
 
     // style
     setStyle(::WizGetStyle(m_app.userSettings().skin()));
-//    QColor colorBg = Utils::StyleHelper::treeViewBackground();
-//    QPalette pal = palette();
-//    colorBg.setAlpha(200);
-//    pal.setBrush(QPalette::Base, colorBg);
-//    setPalette(pal);
-//    setStyleSheet("background-color: transparent;");
-//    setAutoFillBackground(true);   
+    QColor colorBg = Utils::WizStyleHelper::treeViewBackground();
+    QPalette pal = palette();
+    colorBg.setAlpha(200);
+    pal.setBrush(QPalette::Base, colorBg);
+    setPalette(pal);
+    setStyleSheet("background-color: transparent;");
+    setAutoFillBackground(true);
 
     // signals from database
     connect(&m_dbMgr, SIGNAL(documentCreated(const WIZDOCUMENTDATA&)),
@@ -203,12 +205,15 @@ WizCategoryBaseView::WizCategoryBaseView(WizExplorerApp& app, QWidget* parent)
 
 WizCategoryBaseView::~WizCategoryBaseView()
 {
+    disconnect();
+    //
     if (!m_dragHoveredTimer) {
         m_dragHoveredTimer->stop();
         delete m_dragHoveredTimer;
         m_dragHoveredTimer = 0;
     }
 }
+
 
 void WizCategoryBaseView::mousePressEvent(QMouseEvent* event)
 {
@@ -283,6 +288,7 @@ void WizCategoryBaseView::resizeEvent(QResizeEvent* event)
 
 void WizCategoryBaseView::contextMenuEvent(QContextMenuEvent * e)
 {
+    m_selectedItem = nullptr;
     WizCategoryViewItemBase* pItem = dynamic_cast<WizCategoryViewItemBase*>(itemAt(e->pos()));
     if (pItem) {
         pItem->showContextMenu(this, mapToGlobal(e->pos()));
@@ -306,7 +312,7 @@ void WizCategoryBaseView::startDrag(Qt::DropActions supportedActions)
         if (m_dragItem != nullptr)
         {
 //            blockSignals(true);
-            setCurrentItem(m_dragItem);
+            //setCurrentItem(m_dragItem);
 //            blockSignals(false);
             m_dragItem = nullptr;
         }
@@ -395,7 +401,7 @@ void WizCategoryBaseView::dragMoveEvent(QDragMoveEvent *event)
             }
         }
 
-        if (nAccept == m_dragDocArray.size()) {
+        if (nAccept == (int)m_dragDocArray.size()) {
             event->acceptProposedAction();
         }
         else
@@ -449,7 +455,7 @@ void WizCategoryBaseView::dragLeaveEvent(QDragLeaveEvent* event)
 QAbstractItemView::DropIndicatorPosition WizCategoryBaseView::position(const QPoint &pos, const QRect &rect, const QModelIndex &index) const
 {
     QAbstractItemView::DropIndicatorPosition r = QAbstractItemView::OnViewport;
-    const int margin = 2;
+    const int margin = 4;
     if (pos.y() - rect.top() < margin) {
         r = QAbstractItemView::AboveItem;
     } else if (rect.bottom() - pos.y() < margin) {
@@ -538,6 +544,7 @@ bool WizCategoryBaseView::dropOn(QDropEvent *event, int *dropRow, int *dropCol, 
     *dropIndex = index;
     *dropRow = row;
     *dropCol = col;
+    //
     if (!droppingOnItself(event, index))
         return true;
     //
@@ -547,7 +554,7 @@ bool WizCategoryBaseView::dropOn(QDropEvent *event, int *dropRow, int *dropCol, 
 
 
 
-void WizCategoryBaseView::dropEventCore(QDropEvent *event)
+QTreeWidgetItem* WizCategoryBaseView::dropEventCore(QDropEvent *event)
 {
     if (event->source() == this && (event->dropAction() == Qt::MoveAction ||
                                     dragDropMode() == QAbstractItemView::InternalMove)) {
@@ -563,50 +570,70 @@ void WizCategoryBaseView::dropEventCore(QDropEvent *event)
                 indexes.append(idx);
 
             if (indexes.contains(topIndex))
-                return;
+                return nullptr;
 
             // When removing items the drop location could shift
             QPersistentModelIndex dropRow = model()->index(row, col, topIndex);
 
+            QTreeWidgetItem* oldParent = nullptr;
             // Remove the items
             QList<QTreeWidgetItem *> taken;
             for (const auto &index : indexes) {
-                QTreeWidgetItem *parent = itemFromIndex(index);
-                if (!parent || !parent->parent()) {
-                    taken.append(takeTopLevelItem(index.row()));
-                } else {
-                    taken.append(parent->parent()->takeChild(index.row()));
+                QTreeWidgetItem *item = itemFromIndex(index);
+                if (item && item->parent()) {
+                    QTreeWidgetItem *itemTaken = item->parent()->child(index.row());
+                    if (WizCategoryViewItemBase* base = dynamic_cast<WizCategoryViewItemBase*>(itemTaken)) {
+                        base->setWillBeDeleted(true);
+                    }
+                    oldParent = itemTaken->parent();
+                    qDebug() << item->text(0) << "==" << itemTaken->text(0);
+                    QTreeWidgetItem* copied = itemTaken->clone();
+                    copied->addChildren(itemTaken->takeChildren());
+                    taken.append(copied);
                 }
             }
 
+
+            QTreeWidgetItem* result = nullptr;
             // insert them back in at their new positions
             for (int i = 0; i < indexes.count(); ++i) {
                 // Either at a specific point or appended
+                QTreeWidgetItem *itemInsert = taken.takeFirst();
+                result = itemInsert;
+                qDebug() << itemInsert->text(0);
+                //
                 if (row == -1) {
+                    //
+                    //直接移动作为子目录，不需要排序
                     if (topIndex.isValid()) {
+                        //
                         QTreeWidgetItem *parent = itemFromIndex(topIndex);
-                        parent->insertChild(parent->childCount(), taken.takeFirst());
-                    } else {
-                        insertTopLevelItem(topLevelItemCount(), taken.takeFirst());
+                        if (parent == oldParent) {
+                            return nullptr;
+                        }
+                        //
+                        qDebug() << parent->text(0);
+                        parent->insertChild(parent->childCount(), itemInsert);
                     }
                 } else {
+                    //
+                    //移动并且排序
                     int r = dropRow.row() >= 0 ? dropRow.row() : row;
                     if (topIndex.isValid()) {
                         QTreeWidgetItem *parent = itemFromIndex(topIndex);
-                        parent->insertChild(qMin(r, parent->childCount()), taken.takeFirst());
-                    } else {
-                        insertTopLevelItem(qMin(r, topLevelItemCount()), taken.takeFirst());
+                        qDebug() << parent->text(0);
+                        parent->insertChild(qMin(r, parent->childCount()), itemInsert);
                     }
                 }
             }
-
+            //
             event->accept();
-            // Don't want QAbstractItemView to delete it because it was "moved" we already did it
-            event->setDropAction(Qt::CopyAction);
+            return result;
         }
     }
 
     QTreeView::dropEvent(event);
+    return nullptr;
 }
 
 void WizCategoryBaseView::dropEvent(QDropEvent * event)
@@ -676,6 +703,10 @@ void WizCategoryBaseView::dropEvent(QDropEvent * event)
         {
             qDebug() << "null item";
         }
+        else
+        {
+            qDebug() << "hover item: " << hoverItem->text(0);
+        }
 
         if (pItem->type() == Category_ShortcutRootItem || pItem->type() == Category_TagItem)
         {
@@ -685,10 +716,10 @@ void WizCategoryBaseView::dropEvent(QDropEvent * event)
         }
         else
         {
-            dropEventCore(event);
-            if (m_dragItem && event->isAccepted())
+            QTreeWidgetItem* newItem = dropEventCore(event);
+            if (newItem && event->isAccepted())
             {
-                on_itemPosition_changed(m_dragItem);
+                on_itemPosition_changed(dynamic_cast<WizCategoryViewItemBase*>(newItem));
             }
         }
         viewport()->repaint();
@@ -737,7 +768,7 @@ QString WizCategoryBaseView::selectedItemKbGUID()
 QString WizCategoryBaseView::storedSelectedItemKbGuid()
 {
     if (!m_selectedItem)
-        return QString();
+        return selectedItemKbGUID();
     //
     WizCategoryViewItemBase* pItem = dynamic_cast<WizCategoryViewItemBase*>(m_selectedItem);
     if (!pItem)
@@ -974,6 +1005,7 @@ bool WizCategoryView::renameFolder(WizCategoryViewFolderItem* item, const QStrin
         return false;
 
     CString validName = strFolderName;
+    validName.trim();
     WizMakeValidFileNameNoPath(validName);
 
     QString strLocation;
@@ -983,21 +1015,18 @@ bool WizCategoryView::renameFolder(WizCategoryViewFolderItem* item, const QStrin
 
     qDebug() << "rename folder from : " << strOldLocation << "  to : " << strLocation;
 
-    if (strLocation == strOldLocation)
-        return true;
+    if (strLocation == strOldLocation) {
+        m_renamingFolder = false;
+        item->setLocation(strOldLocation);
+        return false;
+    }
 
-    CWizStdStringArray arrayLocation;
-    m_dbMgr.db().getAllLocationsWithExtra(arrayLocation);
-    if (std::find(arrayLocation.begin(), arrayLocation.end(), strLocation) != arrayLocation.end())
+    if (m_dbMgr.db().isFolderExists(strLocation))
     {
-        if (WizMessageBox::question(0, tr("Info"), tr("Folder '%1' already exists, combine these folders?").arg(validName)) == QMessageBox::No)
-        {
-            validName = getUseableItemName(item->parent(), item);
-            item->setText(0, validName);
-            strLocation = strOldLocation.left(n + 1) + validName + "/";
-            if (strLocation == strOldLocation)
-                return true;
-        }
+        WizMessageBox::warning(0, tr("Info"), tr("Folder '%1' already exists.").arg(validName));
+        m_renamingFolder = false;
+        item->setLocation(strOldLocation);
+        return false;
     }
 
     // move all documents to new folder
@@ -1009,9 +1038,10 @@ bool WizCategoryView::renameFolder(WizCategoryViewFolderItem* item, const QStrin
     return true;
 }
 
-bool WizCategoryView::renameGroupFolder(WizCategoryViewGroupItem* pGroup, const QString& strFolderName)
+bool WizCategoryView::renameGroupFolder(WizCategoryViewGroupItem* pGroup, CString strFolderName)
 {
     WIZTAGDATA tag = pGroup->tag();
+    strFolderName.trim();
 
     QTreeWidgetItem* sameNameBrother = findSameNameBrother(pGroup->parent(), pGroup, strFolderName);
 
@@ -1019,43 +1049,9 @@ bool WizCategoryView::renameGroupFolder(WizCategoryViewGroupItem* pGroup, const 
     tag.strName = strFolderName;
     if (sameNameBrother != nullptr)
     {
-        if (WizMessageBox::question(0, tr("Info"), tr("Folder '%1' already exists, combine these folders?").arg(strFolderName)) == QMessageBox::Yes)
-        {
-            // move documents to brother folder  and move child folders to brother folder
-            WIZTAGDATA targetTag;
-            if (sameNameBrother->type() == Category_GroupNoTagItem)
-            {
-                targetTag.strKbGUID = pGroup->kbGUID();
-            }
-            else
-            {
-                WizCategoryViewGroupItem* targetItem = dynamic_cast<WizCategoryViewGroupItem*>(sameNameBrother);
-                targetTag = targetItem->tag();
-            }
-            //
-            CWizDocumentDataArray arrayDocument;
-            if (db.getDocumentsByTag(pGroup->tag(), arrayDocument))
-            {
-                moveDocumentsToGroupFolder(arrayDocument, targetTag);
-            }
-            CWizTagDataArray arrayTag;
-            if (db.getChildTags(pGroup->tag().strGUID, arrayTag))
-            {
-                for (WIZTAGDATA tag : arrayTag)
-                {
-                   tag.strParentGUID = targetTag.strGUID;
-                   db.modifyTag(tag);
-                }
-            }
-            db.deleteTag(pGroup->tag(), true);
-
-            return true;
-        }
-        else
-        {
-            QString useableName = getUseableItemName(pGroup->parent(), pGroup);
-            tag.strName = useableName;
-        }
+        WizMessageBox::warning(0, tr("Info"), tr("Folder '%1' already exists.").arg(strFolderName));
+        pGroup->reload(db);
+        return true;
     }
     db.modifyTag(tag);
     pGroup->reload(db);
@@ -1146,7 +1142,8 @@ QTreeWidgetItem*WizCategoryView::findSameNameBrother(QTreeWidgetItem* parent, QT
     {
         for (int i = 0; i < parent->childCount(); i++)
         {
-            if (parent->child(i) != exceptItem && parent->child(i)->text(0) == name)
+            if (parent->child(i) != exceptItem
+                && parent->child(i)->text(0).compare(name, Qt::CaseInsensitive) == 0)
             {
                 return parent->child(i);
             }
@@ -1273,6 +1270,8 @@ Qt::ItemFlags WizCategoryBaseView::dragItemFlags() const
 /* ------------------------------ CWizCategoryView ------------------------------ */
 WizCategoryView::WizCategoryView(WizExplorerApp& app, QWidget* parent)
     : WizCategoryBaseView(app, parent)
+    , m_renamingFolder(false)
+
 {
     setSelectionMode(QAbstractItemView::SingleSelection);
     setDragEnabled(false);
@@ -1290,6 +1289,17 @@ WizCategoryView::WizCategoryView(WizExplorerApp& app, QWidget* parent)
 
 WizCategoryView::~WizCategoryView()
 {
+}
+
+void WizCategoryView::applyTheme()
+{
+    disconnect(this, SIGNAL(itemChanged(QTreeWidgetItem*,int)), this, SLOT(on_itemChanged(QTreeWidgetItem*,int)));
+    for (int i = 0; i< topLevelItemCount(); i++) {
+        if (WizCategoryViewItemBase* item = dynamic_cast<WizCategoryViewItemBase *>(topLevelItem(i))) {
+           item->resetIcon(true);
+        }
+    }
+    connect(this, SIGNAL(itemChanged(QTreeWidgetItem*,int)), SLOT(on_itemChanged(QTreeWidgetItem*,int)));
 }
 
 void WizCategoryView::initMenus()
@@ -1363,13 +1373,6 @@ void WizCategoryView::initMenus()
     addAction(actionTrash);
     connect(actionTrash, SIGNAL(triggered()), SLOT(on_action_emptyTrash()));
 
-    QAction* actionRecovery = new QAction("ActionRecovery", this);
-    actionRecovery->setData(ActionRecovery);
-    actionRecovery->setText(CATEGORY_ACTION_RECOVERY_DELETED_NOTES);
-    addAction(actionRecovery);
-    connect(actionRecovery, SIGNAL(triggered()), SLOT(on_action_deleted_recovery()));
-    //
-
 
 //    QAction* actionQuitGroup = new QAction("QuitGroup", this);
 //    actionQuitGroup->setShortcutContext(Qt::WidgetShortcut);
@@ -1430,7 +1433,6 @@ void WizCategoryView::initMenus()
     // trash menu
     m_menuTrash = std::make_shared<QMenu>();
     m_menuTrash->addAction(actionTrash);
-    m_menuTrash->addAction(actionRecovery);
 
     // folder root menu
     m_menuFolderRoot = std::make_shared<QMenu>();
@@ -1953,7 +1955,7 @@ bool WizCategoryView::createDocumentByAttachments(WIZDOCUMENTDATA& data, const Q
         return false;
 
     QString strTitle =Utils::WizMisc::extractFileName(attachList.first());
-    if (!createDocument(data, "<p><br/></p>", strTitle))
+    if (!createDocument(data, "<div><br/></div>", strTitle))
         return false;
 
     WizDatabase& db = m_dbMgr.db(data.strKbGUID);
@@ -2035,12 +2037,15 @@ void WizCategoryView::on_action_user_newFolder()
 
 }
 
-void WizCategoryView::on_newFolder_inputText_changed(const QString& text)
+void WizCategoryView::on_newFolder_inputText_changed(QString text)
 {
     if (WizLineInputDialog* dialog = qobject_cast<WizLineInputDialog*>(sender()))
     {
+        text = text.trimmed();
+        //
         if (!WizIsValidFileNameNoPath(text))
         {
+            dialog->setErrorMessage(tr("Invalid folder name"));
             dialog->setOKButtonEnable(false);
             return;
         }
@@ -2058,10 +2063,13 @@ void WizCategoryView::on_newFolder_inputText_changed(const QString& text)
         if (m_dbMgr.db().isFolderExists(strLocation))
         {
             dialog->setOKButtonEnable(false);
+            dialog->setErrorMessage(tr("Folder has already exists"));
             return;
         }
 
         dialog->setOKButtonEnable(true);
+        dialog->setErrorMessage(tr(""));
+
     }
 }
 
@@ -2078,6 +2086,7 @@ void WizCategoryView::on_action_user_newFolder_confirmed(int result)
     if (strFolderName.isEmpty())
         return;
 
+    strFolderName.trim();
     WizMakeValidFileNameNoPath(strFolderName);
 
     QString strLocation;
@@ -2102,6 +2111,7 @@ void WizCategoryView::on_action_user_newTag()
                                                           tr("Please input tag name: "),
                                                           "", window());
     connect(dialog, SIGNAL(finished(int)), SLOT(on_action_user_newTag_confirmed(int)));
+    connect(dialog, SIGNAL(textChanged(QString)), SLOT(on_newTag_inputText_changed(QString)));
 
     dialog->exec();
 }
@@ -2150,6 +2160,42 @@ void WizCategoryView::on_action_user_newTag_confirmed(int result)
     }
 }
 
+
+void WizCategoryView::on_newTag_inputText_changed(const QString& text)
+{
+    WIZTAGDATA parentTag;
+
+    if (WizCategoryViewTagItem* p = currentCategoryItem<WizCategoryViewTagItem>()) {
+        parentTag = p->tag();
+    }
+
+    if (WizLineInputDialog* dialog = qobject_cast<WizLineInputDialog*>(sender()))
+    {
+        QString strTagNames = text;
+        QStringList sl = strTagNames.split(';');
+        QStringList::const_iterator it;
+        for (it = sl.begin(); it != sl.end(); it++) {
+            CString strTagName = *it;
+            strTagName.trim();
+
+            CWizTagDataArray arrayTag;
+            if (m_dbMgr.db().tagByName(strTagName, arrayTag)) {
+                for (WIZTAGDATA tagNew : arrayTag) {
+                    if (tagNew.strParentGUID == parentTag.strGUID) {
+                        dialog->setErrorMessage(tr("Tag has already exists"));
+                        dialog->setOKButtonEnable(false);
+                        return;
+
+                    }
+                }
+            }
+        }
+
+        dialog->setOKButtonEnable(true);
+        dialog->setErrorMessage(tr(""));
+    }
+}
+
 void WizCategoryView::on_action_group_newFolder()
 {
     ::WizGetAnalyzer().logAction("categoryMenuNewGroupFolder");
@@ -2158,6 +2204,7 @@ void WizCategoryView::on_action_group_newFolder()
                                                           "", window());
 
     connect(dialog, SIGNAL(finished(int)), SLOT(on_action_group_newFolder_confirmed(int)));
+    connect(dialog, SIGNAL(textChanged(QString)), SLOT(on_group_newFolder_inputText_changed(QString)));
 
     dialog->exec();
 }
@@ -2203,6 +2250,53 @@ void WizCategoryView::on_action_group_newFolder_confirmed(int result)
 }
 
 
+void WizCategoryView::on_group_newFolder_inputText_changed(const QString& text)
+{
+    WIZTAGDATA parentTag;
+    QString strKbGUID;
+
+    if (WizCategoryViewGroupRootItem* pRoot = currentCategoryItem<WizCategoryViewGroupRootItem>()) {
+        strKbGUID = pRoot->kbGUID();
+    }
+
+    if (WizCategoryViewGroupItem* p = currentCategoryItem<WizCategoryViewGroupItem>()) {
+        strKbGUID = p->kbGUID();
+        parentTag = p->tag();
+    }
+
+    if (strKbGUID.isEmpty()) {
+        Q_ASSERT(0);
+        return;
+    }
+
+    if (WizLineInputDialog* dialog = qobject_cast<WizLineInputDialog*>(sender()))
+    {
+        QString strTagNames = text;
+        QStringList sl = strTagNames.split(';');
+        QStringList::const_iterator it;
+        for (it = sl.begin(); it != sl.end(); it++) {
+            CString strTagName = *it;
+            strTagName.trim();
+
+            CWizTagDataArray arrayTag;
+            if (m_dbMgr.db(strKbGUID).tagByName(strTagName, arrayTag)) {
+                for (WIZTAGDATA tagNew : arrayTag) {
+                    if (tagNew.strParentGUID == parentTag.strGUID) {
+                        dialog->setErrorMessage(tr("Folder has already exists"));
+                        dialog->setOKButtonEnable(false);
+                        return;
+
+                    }
+                }
+            }
+        }
+
+        dialog->setOKButtonEnable(true);
+        dialog->setErrorMessage(tr(""));
+    }
+}
+
+
 void WizCategoryView::on_action_moveItem()
 {
 //    if (currentCategoryItem<CWizCategoryViewFolderItem>()) {
@@ -2221,7 +2315,10 @@ void WizCategoryView::on_action_user_moveFolder()
     selector->setAcceptRoot(true);
 
     connect(selector, SIGNAL(finished(int)), SLOT(on_action_user_moveFolder_confirmed(int)));
-    selector->exec();
+    //
+    QTimer::singleShot(0, [=]() {
+        selector->exec();
+    });
 }
 
 void WizCategoryView::on_action_user_moveFolder_confirmed(int result)
@@ -2309,7 +2406,10 @@ void WizCategoryView::on_action_user_copyFolder()
     selector->setCopyStyle(!isGroup);
 
     connect(selector, SIGNAL(finished(int)), SLOT(on_action_user_copyFolder_confirmed(int)));
-    selector->exec();
+    //
+    QTimer::singleShot(0, [=]() {
+        selector->exec();
+    });
 }
 
 void WizCategoryView::on_action_user_copyFolder_confirmed(int result)
@@ -2354,6 +2454,40 @@ void WizCategoryView::on_action_user_copyFolder_confirmed(int result)
     }
 }
 
+//
+
+void WizApplyDarkModeStyles_lineEditor(QObject* parent)
+{
+    for (QObject* child : parent->children()) {
+
+        if (QWidget* childWidget = dynamic_cast<QWidget*>(child)) {
+            //
+            QString className = child->metaObject()->className();
+            //
+            qDebug() << className << childWidget->geometry();
+            //
+            if (QWidget* widget = dynamic_cast<QLineEdit*>(child)) {
+                widget->setAutoFillBackground(true);
+                QRect rect = widget->geometry();
+
+                int height = WizSmartScaleUI(18);
+                if (rect.height() > height) {
+                    rect.setY(rect.y() + (rect.height() - height) / 2);
+                    rect.setBottom(rect.y() + height);
+                }
+                widget->setGeometry(rect);
+                if (isDarkMode()) {
+                    widget->setStyleSheet("color:#eeeeee;background-color:#4a4a4a");
+                } else {
+                    widget->setStyleSheet("color:black;background-color:white");
+                }
+            }
+        }
+        //
+        WizApplyDarkModeStyles_lineEditor(child);
+    }
+}
+
 void WizCategoryView::on_action_renameItem()
 {
     QTreeWidgetItem* p = currentItem();
@@ -2365,11 +2499,19 @@ void WizCategoryView::on_action_renameItem()
             {
                 //user can not rename predefined folders name
                 if (WizIsPredefinedLocation(pFolder->location()))
+                {
+                    QMessageBox::information(0, tr("Info"), tr("The default folder can not be renamed."));
+
                     return;
+                }
             }
         }
+        //
+        m_renamingFolder = true;
         p->setFlags(p->flags() | Qt::ItemIsEditable);
         editItem(p, 0);
+        //
+        WizApplyDarkModeStyles_lineEditor(this);
     }
 }
 
@@ -2398,6 +2540,7 @@ void WizCategoryView::on_action_user_renameFolder_confirmed(int result)
         return;
     }
 
+    strFolderName.trim();
     if (strFolderName.isEmpty()) {
         return;
     }
@@ -2467,6 +2610,7 @@ void WizCategoryView::on_action_user_renameTag_confirmed(int result)
     if (strTagName.isEmpty())
         return;
 
+
     if (WizCategoryViewTagItem* p = currentCategoryItem<WizCategoryViewTagItem>()) {
         WIZTAGDATA tag = p->tag();
         tag.strName = strTagName;
@@ -2494,13 +2638,14 @@ void WizCategoryView::on_action_group_renameFolder()
 void WizCategoryView::on_action_group_renameFolder_confirmed(int result)
 {
     WizLineInputDialog* dialog = qobject_cast<WizLineInputDialog*>(sender());
-    QString strTagName = dialog->input();
+    CString strTagName = dialog->input();
     dialog->deleteLater();
 
     if (result != QDialog::Accepted) {
         return;
     }
 
+    strTagName.trim();
     if (strTagName.isEmpty()) {
         return;
     }
@@ -2654,21 +2799,7 @@ void WizCategoryView::on_action_group_deleteFolder_confirmed(int result)
     }
 }
 
-void WizCategoryView::on_action_deleted_recovery()
-{
-    ::WizGetAnalyzer().logAction("categoryMenuRecovery");
-    WizCategoryViewTrashItem* trashItem = currentCategoryItem<WizCategoryViewTrashItem>();
-    if (trashItem)
-    {
-        WizExecuteOnThread(WIZ_THREAD_NETWORK, [=](){
-            QString strToken = WizToken::token();
-            QString strUrl = WizCommonApiEntry::makeUpUrlFromCommand("deleted_recovery", strToken, "&kb_guid=" + trashItem->kbGUID());
-            WizExecuteOnThread(WIZ_THREAD_MAIN, [=](){
-                WizShowWebDialogWithToken(tr("Recovery notes"), strUrl, 0, QSize(800, 480), true);
-            });
-        });
-    }
-}
+
 
 void WizCategoryView::on_action_itemAttribute()
 {
@@ -2893,6 +3024,7 @@ void WizCategoryView::on_itemSelectionChanged()
 
 void WizCategoryView::on_itemChanged(QTreeWidgetItem* item, int column)
 {
+    Q_UNUSED(column);
     //ignore item changed signal that caused by drag-drop
     if (m_dragItem)
         return;
@@ -2900,22 +3032,43 @@ void WizCategoryView::on_itemChanged(QTreeWidgetItem* item, int column)
     qDebug() << "item changed : " << item->text(0) << item->type();
     if (item->type() == Category_FolderItem)
     {
-        WizCategoryViewFolderItem* pFolder = dynamic_cast<WizCategoryViewFolderItem*>(item);
-        if (pFolder == nullptr || pFolder->text(0) == pFolder->name())
+        if (!m_renamingFolder) {
             return;
+        }
+        //
+        WizCategoryViewFolderItem* pFolder = dynamic_cast<WizCategoryViewFolderItem*>(item);
+        if (WizIsPredefinedLocation(pFolder->location())) {
+            return;
+        }
+        if (pFolder == nullptr
+            || pFolder->text(0) == pFolder->name()
+            || pFolder->text(0) == WizDatabase::getLocationDisplayName(pFolder->location()))
+            return;
+
         qDebug() << "folder changed text " << pFolder->text(0) << "  name : " << pFolder->name();
 
        renameFolder(pFolder, pFolder->text(0));
+       m_renamingFolder = false;
     }
     else if (item->type() == Category_TagItem)
     {
         WizCategoryViewTagItem* pTag = dynamic_cast<WizCategoryViewTagItem*>(item);
-        if (pTag == nullptr || pTag->text(0).isEmpty() || pTag->text(0) == pTag->tag().strName)
+        CString text = pTag->text(0);
+        text.trim();
+        if (text.isEmpty() || text == pTag->tag().strName) {
+            pTag->reload(m_dbMgr.db());
             return;
+        }
+        //
+        if (findSameNameBrother(pTag->parent(), pTag, text)) {
+            pTag->reload(m_dbMgr.db());
+            return;
+        }
 
-        qDebug() << "tag changed text " << pTag->text(0) << "  name : " << pTag->tag().strName;
+        qDebug() << "tag changed text " << text << "  name : " << pTag->tag().strName;
+        //
         WIZTAGDATA tag = pTag->tag();
-        tag.strName = pTag->text(0);
+        tag.strName = text;
         m_dbMgr.db().modifyTag(tag);
         pTag->reload(m_dbMgr.db());
     }
@@ -2932,6 +3085,7 @@ void WizCategoryView::on_itemChanged(QTreeWidgetItem* item, int column)
 
 void WizCategoryView::on_itemClicked(QTreeWidgetItem *item, int column)
 {
+    Q_UNUSED(column);
     if (WizCategoryViewLinkItem* pLink = dynamic_cast<WizCategoryViewLinkItem*>(item))
     {
         if (LINK_COMMAND_ID_CREATE_GROUP == pLink->commandId())
@@ -3153,6 +3307,9 @@ void WizCategoryView::initTopLevelItems()
 
     WizCategoryViewSearchRootItem* pSearchRoot = new WizCategoryViewSearchRootItem(m_app, CATEGORY_SEARCH);
     addTopLevelItem(pSearchRoot);
+    //
+    WizCategoryViewMySharesItem* pShareItem = new WizCategoryViewMySharesItem(m_app, CATEGORY_MYSHARES);
+    addTopLevelItem(pShareItem);
 
     WizCategoryViewAllFoldersItem* pAllFoldersItem = new WizCategoryViewAllFoldersItem(m_app, CATEGORY_FOLDERS, m_dbMgr.db().kbGUID());
     addTopLevelItem(pAllFoldersItem);
@@ -3244,9 +3401,11 @@ void WizCategoryView::init()
 
     for (int i = 0; i < topLevelItemCount(); ++i)
     {
-        if (dynamic_cast<WizCategoryViewBizGroupRootItem*>(topLevelItem(i)))
+        if (WizCategoryViewBizGroupRootItem* pItem = dynamic_cast<WizCategoryViewBizGroupRootItem*>(topLevelItem(i)))
         {
-            topLevelItem(i)->sortChildren(0, Qt::AscendingOrder);
+            int childCount = pItem->childCount();
+            qDebug() << childCount;
+            pItem->sortChildren(0, Qt::AscendingOrder);
         }
     }
     //
@@ -3331,8 +3490,7 @@ void WizCategoryView::resetSections()
                     WizOEMSettings oemSettings(m_dbMgr.db().getAccountPath());
                     if(CATEGORY_TEAM_GROUPS == sectionName && !oemSettings.isForbidCreateBiz())
                     {
-                        QString strIconPath = ::WizGetSkinResourcePath(m_app.userSettings().skin()) + "category_create_group.png";
-                        pExistingSection->setExtraButtonIcon(strIconPath);
+                        pExistingSection->setExtraButtonIcon("category_create_group");
                     }
                     insertTopLevelItem(i, pExistingSection);
                     i++;
@@ -3385,7 +3543,7 @@ void WizCategoryView::updatePersonalFolderDocumentCount_impl()
     // trash item
     for (int i = pFolderRoot->childCount() - 1; i >= 0; i--) {
         if (WizCategoryViewTrashItem* pTrash = dynamic_cast<WizCategoryViewTrashItem*>(pFolderRoot->child(i))) {
-            pTrash->setDocumentsCount(-1, m_dbMgr.db().getTrashDocumentCount());
+            //pTrash->setDocumentsCount(-1, m_dbMgr.db().getTrashDocumentCount());
         }
     }
 
@@ -3558,7 +3716,7 @@ void WizCategoryView::importFiles(QStringList& strFileList)
 
 bool WizCategoryView::createDocument(WIZDOCUMENTDATA& data)
 {
-    return createDocument(data, "<!DOCTYPE html><html><head></head><body><p><br/></p></body></html>", tr("Untitled"));
+    return createDocument(data, "<!DOCTYPE html><html><head></head><body><div><br/></div></body></html>", tr("Untitled"));
 }
 
 void WizCategoryView::on_updatePersonalTagDocumentCount_timeout()
@@ -3687,8 +3845,7 @@ void WizCategoryView::setBizRootItemExtraButton(WizCategoryViewItemBase* pItem, 
         WizDatabase& db = m_dbMgr.db();
         if (bizData.bizIsDue || db.isBizServiceExpr(bizData.bizGUID))
         {
-            QString strIconPath = ::WizGetSkinResourcePath(m_app.userSettings().skin()) + "bizDue.png";
-            pItem->setExtraButtonIcon(strIconPath);
+            pItem->setExtraButtonIcon("bizDue");
         }
         else
         {
@@ -3704,8 +3861,7 @@ void WizCategoryView::setGroupRootItemExtraButton(WizCategoryViewItemBase* pItem
         WizDatabase& db = m_dbMgr.db(gData.strGroupGUID);
         if (db.isStorageLimit() || db.isTrafficLimit() || db.isNoteCountLimit())
         {
-            QString strIconPath = ::WizGetSkinResourcePath(m_app.userSettings().skin()) + "groupLimit.png";
-            pItem->setExtraButtonIcon(strIconPath);
+            pItem->setExtraButtonIcon("groupLimit");
         }
         else
         {
@@ -3734,6 +3890,10 @@ void WizCategoryView::moveFolderPostionBeforeTrash(const QString& strLocation)
 
 bool WizCategoryView::getAvailableNewNoteTagAndLocation(QString& strKbGUID, WIZTAGDATA& tag, QString& strLocation)
 {
+    if (m_selectedItem) {
+        this->restoreSelection();
+    }
+    //
     QTreeWidgetItem* item = currentItem();
     if (!item)
     {
@@ -3899,40 +4059,43 @@ void WizCategoryView::updateGroupFolderPosition(WizDatabase& db, WizCategoryView
         WIZTAGDATA tag = pGroup->tag();
 
         QTreeWidgetItem* sameNameBrother = findSameNameBrother(pItem->parent(), pItem, pItem->text(0));
+        if (sameNameBrother) {
 
-        WizDatabase& db = m_dbMgr.db(tag.strKbGUID);
-        bool combineFolder = false;
-        if (sameNameBrother != nullptr)
-        {
-            if (WizMessageBox::question(0, tr("Info"), tr("Folder '%1' already exists, combine these folders?").arg(tag.strName)) == QMessageBox::Yes)
-            {
-                // move documents to brother folder  and move child folders to brother folder
-                WizCategoryViewGroupItem* targetItem = dynamic_cast<WizCategoryViewGroupItem*>(sameNameBrother);
-                combineGroupFolder(pGroup, targetItem);
+            WizCategoryViewGroupItem* brotherTagItem = dynamic_cast<WizCategoryViewGroupItem*>(sameNameBrother);
+            if (brotherTagItem && brotherTagItem->tag().strGUID != tag.strGUID) {
 
-                setCurrentItem(targetItem);
-                if (m_dragItem == pItem)
+                WizDatabase& db = m_dbMgr.db(tag.strKbGUID);
+                bool combineFolder = false;
+                if (WizMessageBox::question(0, tr("Info"), tr("Folder '%1' already exists, combine these folders?").arg(tag.strName)) == QMessageBox::Yes)
                 {
-                    m_dragItem = nullptr;
-                }
-                combineFolder = true;
-            }
-        }
+                    // move documents to brother folder  and move child folders to brother folder
+                    WizCategoryViewGroupItem* targetItem = dynamic_cast<WizCategoryViewGroupItem*>(sameNameBrother);
+                    combineGroupFolder(pGroup, targetItem);
 
-        if (sameNameBrother == nullptr || !combineFolder)
-        {
-            QString useableName = getUseableItemName(pGroup->parent(), pGroup);
-            tag.strName = useableName;
-            tag.strParentGUID = "";
-            if (pItem->parent()->type() == Category_GroupItem)
-            {
-                WizCategoryViewGroupItem* parentItem = dynamic_cast<WizCategoryViewGroupItem*>(pGroup->parent());
-                Q_ASSERT(parentItem);
-                tag.strParentGUID = parentItem->tag().strGUID;
+                    setCurrentItem(targetItem);
+                    if (m_dragItem == pItem)
+                    {
+                        m_dragItem = nullptr;
+                    }
+                    combineFolder = true;
+                }
+
+                if (!combineFolder)
+                {
+                    QString useableName = getUseableItemName(pGroup->parent(), pGroup);
+                    tag.strName = useableName;
+                    tag.strParentGUID = "";
+                    if (pItem->parent()->type() == Category_GroupItem)
+                    {
+                        WizCategoryViewGroupItem* parentItem = dynamic_cast<WizCategoryViewGroupItem*>(pGroup->parent());
+                        Q_ASSERT(parentItem);
+                        tag.strParentGUID = parentItem->tag().strGUID;
+                    }
+                    tag.nVersion = -1;
+                    db.updateTag(tag);
+                    pGroup->reload(db);
+                }
             }
-            tag.nVersion = -1;
-            db.updateTag(tag);
-            pGroup->reload(db);
         }
     }
     //
@@ -4124,6 +4287,11 @@ void WizCategoryView::savePersonalTagsPosition(WizDatabase& db, WizCategoryViewT
     }
 }
 
+/*
+ *
+ *父子结构也可能变化了，需要更新父子结构
+ *
+ */
 void WizCategoryView::saveGroupTagsPosition(const QString& strKbGUID)
 {
     WizCategoryViewGroupRootItem* rootItem =
@@ -4150,9 +4318,27 @@ void WizCategoryView::saveGroupTagsPosition(WizDatabase& db, WizCategoryViewGrou
 {
     if (!pItem)
         return;
+    if (pItem->willBeDeleted())
+        return;
 
     WIZTAGDATA tag = pItem->tag();
     db.modifyTagPosition(tag);
+    //
+    QTreeWidgetItem* parent = pItem->parent();
+    if (WizCategoryViewGroupItem* parentTag = dynamic_cast<WizCategoryViewGroupItem*>(parent)) {
+        //
+        if (pItem->tag().strParentGUID != parentTag->tag().strGUID) {
+            tag.strParentGUID = parentTag->tag().strGUID;
+            db.modifyTag(tag);
+        }
+
+    } else if (WizCategoryViewGroupRootItem* group = dynamic_cast<WizCategoryViewGroupRootItem*>(parent)) {
+        //
+        if (!pItem->tag().strParentGUID.isEmpty()) {
+            tag.strParentGUID = "";
+            db.modifyTag(tag);
+        }
+    }
 
     for (int i = 0; i < pItem->childCount(); i++)
     {
@@ -4172,38 +4358,36 @@ QString WizCategoryView::getAllFoldersPosition()
     if (!pItem)
         return QString();
 
-    QString str = "{";
+    Json::Value jValue;
+
     int nStartPos = 1;
     for (int i = 0; i < pItem->childCount(); i++)
     {
         WizCategoryViewFolderItem* childItem = dynamic_cast<WizCategoryViewFolderItem* >(pItem->child(i));
         Q_ASSERT(childItem);
-        str += getAllFoldersPosition(childItem, nStartPos);
-
-        if (i < pItem->childCount() - 1)
-            str += ",\n";
+        getAllFoldersPosition(childItem, nStartPos, jValue);
     }
-    str += "}";
-    return str;
+    return QString::fromStdString(jValue.toStyledString());
 }
 
-QString WizCategoryView::getAllFoldersPosition(WizCategoryViewFolderItem* pItem, int& nStartPos)
+void WizCategoryView::getAllFoldersPosition(WizCategoryViewFolderItem* pItem, int& nStartPos, Json::Value& jValue)
 {
     if (!pItem)
-        return QString();
+        return;
+    //
+    if (pItem->willBeDeleted()) {
+        return;
+    }
 
-    QString str ="\"" + pItem->location() + "\": " + QString::number(nStartPos);
+    jValue[pItem->location().toStdString()] = nStartPos;
     nStartPos ++;
 
     for (int i = 0; i < pItem->childCount(); i++)
     {
         WizCategoryViewFolderItem* childItem = dynamic_cast<WizCategoryViewFolderItem* >(pItem->child(i));
         Q_ASSERT(childItem);
-        str += ", \n";
-        str += getAllFoldersPosition(childItem, nStartPos);
+        getAllFoldersPosition(childItem, nStartPos, jValue);
     }
-
-    return str;
 }
 
 void WizCategoryView::initFolders()
@@ -4586,7 +4770,7 @@ void WizCategoryView::initGroup(WizDatabase& db, bool& itemCreeated)
     WizExecuteOnThread(WIZ_THREAD_MAIN, [=](){
         // only show trash if permission is enough
         WizDatabase& newDb = m_dbMgr.db(strKbGUID);
-        if (newDb.permission() > WIZ_USERGROUP_SUPER)
+        if (newDb.permission() > (int)WIZ_USERGROUP_SUPER)
         {
             pTrashItem->setHidden(true);
         }
@@ -4628,35 +4812,35 @@ void WizCategoryView::initQuickSearches()
     pSearchRoot->addChild(pSearchByDTAccessed);
 
     WizCategoryViewTimeSearchItem* pCreatedToday = new WizCategoryViewTimeSearchItem(m_app, tr("Created since Today"), "DT_CREATED > %1", DateInterval_Today);
-    WizCategoryViewTimeSearchItem* pCreatedYestoday = new WizCategoryViewTimeSearchItem(m_app, tr("Created since Yestoday"), "DT_CREATED > %1", DateInterval_Yestoday);
-    WizCategoryViewTimeSearchItem* pCreatedDayBeforeYestoday = new WizCategoryViewTimeSearchItem(m_app, tr("Created since the day before yestoday"), "DT_CREATED > %1", DateInterval_TheDayBeforeYestoday);
+    WizCategoryViewTimeSearchItem* pCreatedYesterday = new WizCategoryViewTimeSearchItem(m_app, tr("Created since Yesterday"), "DT_CREATED > %1", DateInterval_Yesterday);
+    WizCategoryViewTimeSearchItem* pCreatedDayBeforeYesterday = new WizCategoryViewTimeSearchItem(m_app, tr("Created since the day before yesterday"), "DT_CREATED > %1", DateInterval_TheDayBeforeYesterday);
     WizCategoryViewTimeSearchItem* pCreatedOneWeek = new WizCategoryViewTimeSearchItem(m_app, tr("Created since one week"), "DT_CREATED > %1", DateInterval_LastWeek);
     WizCategoryViewTimeSearchItem* pCreatedOneMonth = new WizCategoryViewTimeSearchItem(m_app, tr("Created since one month"), "DT_CREATED > %1", DateInterval_LastMonth);
     pSearchByDTCreated->addChild(pCreatedToday);
-    pSearchByDTCreated->addChild(pCreatedYestoday);
-    pSearchByDTCreated->addChild(pCreatedDayBeforeYestoday);
+    pSearchByDTCreated->addChild(pCreatedYesterday);
+    pSearchByDTCreated->addChild(pCreatedDayBeforeYesterday);
     pSearchByDTCreated->addChild(pCreatedOneWeek);
     pSearchByDTCreated->addChild(pCreatedOneMonth);
 
     WizCategoryViewTimeSearchItem* pModifiedToday = new WizCategoryViewTimeSearchItem(m_app, tr("Modified since Today"), "DT_MODIFIED > %1", DateInterval_Today);
-    WizCategoryViewTimeSearchItem* pModifiedYestoday = new WizCategoryViewTimeSearchItem(m_app, tr("Modified since Yestoday"), "DT_MODIFIED > %1", DateInterval_Yestoday);
-    WizCategoryViewTimeSearchItem* pModifiedDayBeforeYestoday = new WizCategoryViewTimeSearchItem(m_app, tr("Modified since the day before yestoday"), "DT_MODIFIED > %1", DateInterval_TheDayBeforeYestoday);
+    WizCategoryViewTimeSearchItem* pModifiedYesterday = new WizCategoryViewTimeSearchItem(m_app, tr("Modified since Yesterday"), "DT_MODIFIED > %1", DateInterval_Yesterday);
+    WizCategoryViewTimeSearchItem* pModifiedDayBeforeYesterday = new WizCategoryViewTimeSearchItem(m_app, tr("Modified since the day before yesterday"), "DT_MODIFIED > %1", DateInterval_TheDayBeforeYesterday);
     WizCategoryViewTimeSearchItem* pModifiedOneWeek = new WizCategoryViewTimeSearchItem(m_app, tr("Modified since one week"), "DT_MODIFIED > %1", DateInterval_LastWeek);
     WizCategoryViewTimeSearchItem* pModifiedOneMonth = new WizCategoryViewTimeSearchItem(m_app, tr("Modified since one month"), "DT_MODIFIED > %1", DateInterval_LastMonth);
     pSearchByDTModified->addChild(pModifiedToday);
-    pSearchByDTModified->addChild(pModifiedYestoday);
-    pSearchByDTModified->addChild(pModifiedDayBeforeYestoday);
+    pSearchByDTModified->addChild(pModifiedYesterday);
+    pSearchByDTModified->addChild(pModifiedDayBeforeYesterday);
     pSearchByDTModified->addChild(pModifiedOneWeek);
     pSearchByDTModified->addChild(pModifiedOneMonth);
 
     WizCategoryViewTimeSearchItem* pAccessedToday = new WizCategoryViewTimeSearchItem(m_app, tr("Accessed since Today"), "DT_ACCESSED > %1", DateInterval_Today);
-    WizCategoryViewTimeSearchItem* pAccessedYestoday = new WizCategoryViewTimeSearchItem(m_app, tr("Accessed since Yestoday"), "DT_ACCESSED > %1", DateInterval_Yestoday);
-    WizCategoryViewTimeSearchItem* pAccessedDayBeforeYestoday = new WizCategoryViewTimeSearchItem(m_app, tr("Accessed since the day before yestoday"), "DT_ACCESSED > %1", DateInterval_TheDayBeforeYestoday);
+    WizCategoryViewTimeSearchItem* pAccessedYesterday = new WizCategoryViewTimeSearchItem(m_app, tr("Accessed since Yesterday"), "DT_ACCESSED > %1", DateInterval_Yesterday);
+    WizCategoryViewTimeSearchItem* pAccessedDayBeforeYesterday = new WizCategoryViewTimeSearchItem(m_app, tr("Accessed since the day before yesterday"), "DT_ACCESSED > %1", DateInterval_TheDayBeforeYesterday);
     WizCategoryViewTimeSearchItem* pAccessedOneWeek = new WizCategoryViewTimeSearchItem(m_app, tr("Accessed since one week"), "DT_ACCESSED > %1", DateInterval_LastWeek);
     WizCategoryViewTimeSearchItem* pAccessedOneMonth = new WizCategoryViewTimeSearchItem(m_app, tr("Accessed since one month"), "DT_ACCESSED > %1", DateInterval_LastMonth);
     pSearchByDTAccessed->addChild(pAccessedToday);
-    pSearchByDTAccessed->addChild(pAccessedYestoday);
-    pSearchByDTAccessed->addChild(pAccessedDayBeforeYestoday);
+    pSearchByDTAccessed->addChild(pAccessedYesterday);
+    pSearchByDTAccessed->addChild(pAccessedDayBeforeYesterday);
     pSearchByDTAccessed->addChild(pAccessedOneWeek);
     pSearchByDTAccessed->addChild(pAccessedOneMonth);
 
@@ -5509,14 +5693,13 @@ void WizCategoryView::on_group_permissionChanged(const QString& strKbGUID)
     int nPerm = m_dbMgr.db(strKbGUID).permission();
 
     // only Admin and Super user see trash folder and operate with tag (group folder)
-    if (nPerm > WIZ_USERGROUP_SUPER) {
+    if (nPerm > (int)WIZ_USERGROUP_SUPER) {
         WizCategoryViewTrashItem* pItem =  findTrash(strKbGUID);
         if (pItem) pItem->setHidden(true);
 
         findAction(ActionNewItem)->setEnabled(false);
         findAction(ActionRenameItem)->setEnabled(false);
         findAction(ActionDeleteItem)->setEnabled(false);
-        findAction(ActionRecovery)->setEnabled(false);
 
         findAction(ActionCopyItem)->setEnabled(false);
         findAction(ActionMoveItem)->setEnabled(false);
@@ -5527,20 +5710,19 @@ void WizCategoryView::on_group_permissionChanged(const QString& strKbGUID)
         findAction(ActionNewItem)->setEnabled(true);
         findAction(ActionRenameItem)->setEnabled(true);
         findAction(ActionDeleteItem)->setEnabled(true);
-        findAction(ActionRecovery)->setEnabled(true);
 
         findAction(ActionCopyItem)->setEnabled(true);
         findAction(ActionMoveItem)->setEnabled(true);
     }
 
     // permission greater than author can create new document
-    if (nPerm >= WIZ_USERGROUP_READER) {
+    if (nPerm >= (int)WIZ_USERGROUP_READER) {
         findAction(ActionNewDocument)->setEnabled(false);
     } else {
         findAction(ActionNewDocument)->setEnabled(true);
     }
 
-    if (nPerm >= WIZ_USERGROUP_READER) {
+    if (nPerm >= (int)WIZ_USERGROUP_READER) {
         findAction(ActionImportFile)->setEnabled(false);
     } else {
         findAction(ActionImportFile)->setEnabled(true);
@@ -5549,6 +5731,7 @@ void WizCategoryView::on_group_permissionChanged(const QString& strKbGUID)
 
 void WizCategoryView::on_group_bizChanged(const QString& strKbGUID)
 {
+    Q_UNUSED(strKbGUID);
     //TODO:
 }
 
@@ -5559,6 +5742,10 @@ void WizCategoryView::on_groupDocuments_unreadCount_modified(const QString& strK
 
 void WizCategoryView::on_itemPosition_changed(WizCategoryViewItemBase* pItem)
 {
+    if (!pItem) {
+        return;
+    }
+    //
     QTreeWidgetItem* parentItem = pItem->parent();
     if (!parentItem)
     {
@@ -5856,6 +6043,7 @@ bool WizCategoryView::movePersonalFolder(const QString& sourceFolder, WizFolderS
 
 void WizCategoryView::movePersonalFolderToPersonalFolder(const QString& sourceFolder, const QString& targetParentFolder, bool combineFolder)
 {
+    Q_UNUSED(combineFolder);
     QString name = WizDatabase::getLocationName(sourceFolder);
     QString newLocation = targetParentFolder + name + "/";
     //
@@ -6002,6 +6190,10 @@ void WizCategoryView::moveDocumentsToGroupFolder(const CWizDocumentDataArray& ar
 void WizCategoryView::dropItemAsBrother(WizCategoryViewItemBase* targetItem,
                                          WizCategoryViewItemBase* dragedItem, bool dropAtTop, bool deleteDragSource)
 {
+    Q_UNUSED(targetItem);
+    Q_UNUSED(dragedItem);
+    Q_UNUSED(dropAtTop);
+    Q_UNUSED(deleteDragSource);
 //    if (targetItem->type() == Category_FolderItem)
 //    {
 //        CWizCategoryViewFolderItem* folderItem = dynamic_cast<CWizCategoryViewFolderItem*>(targetItem);
@@ -6114,6 +6306,10 @@ void WizCategoryView::resetFolderLocation(WizCategoryViewFolderItem* item, const
 
 void WizCategoryView::moveFolder(QString oldLocation, QString newLocation)
 {
+    if (oldLocation == newLocation) {
+        return;
+    }
+    //
     ::WizExecutingActionDialog::executeAction(tr("Moving folder..."), WIZ_THREAD_DEFAULT, [=]{
         //
         //wait for sync
@@ -6131,7 +6327,7 @@ void WizCategoryView::moveFolder(QString oldLocation, QString newLocation)
     WizCategoryViewFolderItem* newItem = findFolder(newLocation, true, true);
     if (newItem)
     {
-        setCurrentItem(newItem);
+        //setCurrentItem(newItem);
     }
     //
     WizMainWindow::instance()->quickSyncKb("");

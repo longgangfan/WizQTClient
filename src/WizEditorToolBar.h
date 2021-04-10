@@ -20,6 +20,8 @@ class CWizToolComboBox;
 class CWizToolComboBoxFont;
 class WizExplorerApp;
 class WizTipsWidget;
+class CWizToolLineWidthComboBox;
+class QWidgetAction;
 
 
 class WizDblclickableToolButton : public QToolButton
@@ -50,11 +52,15 @@ public:
     bool hasFocus();
 
     void adjustButtonPosition();
+    void switchToNormalMode();
+    void applyTheme();
     //
     WizTipsWidget* showCoachingTips();
 
 private:
     WizExplorerApp& m_app;
+    //
+    QString m_strToolbarType;
 
     WizDocumentWebView* m_editor;
     QMap<QString, QAction*> m_actions;
@@ -77,6 +83,8 @@ private:
     CWizToolButton* m_btnCheckList;
     CWizToolButton* m_btnInsertLink;
     CWizToolButton* m_btnInsertImage;
+    CWizToolButton* m_btnStartMarkup;
+    CWizToolButton* m_btnInsertPainter;
     CWizToolButton* m_btnInsertDate;
     CWizToolButton* m_btnSearchReplace;
     CWizToolButton* m_btnMobileImage;
@@ -87,12 +95,36 @@ private:
     QAction* m_actionJustifyLeft;
     QAction* m_actionJustifyCenter;
     QAction* m_actionJustifyRight;
+    QWidgetAction* m_tableAction;
 
     QString m_strImageSrc;
 
     QWidget* m_firstLineButtonContainer;
     QWidget* m_secondLineButtonContainer;
-
+    //
+    //
+    //markup tools
+    CWizToolButtonColor* m_btnPencil;
+    CWizToolLineWidthComboBox* m_comboPencil;
+    CWizToolButtonColor* m_btnHighlighter;
+    CWizToolLineWidthComboBox* m_comboHighlighter;
+    CWizToolButton* m_btnEraser;
+    CWizToolLineWidthComboBox* m_comboEraser;
+    CWizToolButtonColor* m_btnShape;
+    CWizToolLineWidthComboBox* m_comboShape;
+    CWizToolButton* m_btnPenWidth;
+    CWizToolButton* m_btnUndo;
+    CWizToolButton* m_btnRedo;
+    CWizToolButton* m_btnGoback;
+    //
+    //outline tools
+    CWizToolButton* m_btnUndoOutline;
+    CWizToolButton* m_btnRedoOutline;
+    CWizToolButton* m_btnOutdentOutline;
+    CWizToolButton* m_btnIndentOutline;
+    CWizToolButton* m_btnNotesOutline;
+    CWizToolButton* m_btnInsertImagesOutline;
+    CWizToolButton* m_btnCompleteOutline;
     //text input would call resetToolbar and cause input delay, lock to ignore reset request
     QString m_currentStyle;
 #ifdef Q_OS_WIN
@@ -104,6 +136,11 @@ private:
 
     // editor status reflect
     void resetToolbar(const QString& currentStyle);
+    //
+    bool avaliableInToolbar(QWidget* widget);
+    void setAvaliableInToolbar(QWidget* widget, QString type);
+    void setToolbarType(QString type);
+    void setPainterToolType(QString type);
 
     QAction* actionFromName(const QString& strName);
 
@@ -112,10 +149,16 @@ private:
     void savePixmap(QPixmap& pix, const QString& strType, bool bUseForCopy);
     void saveGif(const QByteArray& ba);
 
-    QMenu* createColorMenu(const char *slot, const char *slotColorBoard);
+    QMenu* createColorMenu(const char *slot, const char *slotColorBoard = nullptr);
+    QMenu* createLineWidthMenu(const char *slot);
 
-    QList<QWidget*> m_buttonContainersInFirstLine;
-    QList<QWidget*> m_buttonContainersInSecondLine;
+    //QList<QWidget*> m_buttonContainersInFirstLine;
+    //QList<QWidget*> m_buttonContainersInSecondLine;
+    QList<QWidget*> buttonContainersInFirstLine();
+    QList<QWidget*> buttonContainersInSecondLine();
+    //
+    int firstLineWidth();
+    int secondLineWidth();
 
 protected Q_SLOTS:
     void on_editor_google_triggered();
@@ -148,7 +191,6 @@ protected Q_SLOTS:
     void on_btnItalic_clicked();
     void on_btnUnderLine_clicked();
     void on_btnStrikeThrough_clicked();
-    void on_btnJustify_clicked();
     void on_btnJustifyLeft_clicked();
     void on_btnJustifyCenter_clicked();
     void on_btnJustifyRight_clicked();
@@ -159,6 +201,8 @@ protected Q_SLOTS:
     void on_btnHorizontal_clicked();
     void on_btnCheckList_clicked();
     void on_btnInsertImage_clicked();
+    void on_btnStartMarkup_clicked();
+    void on_btnInsertPainter_clicked();
     void on_btnInsertLink_clicked();
     void on_btnInsertDate_clicked();
     void on_btnMobileImage_clicked();
@@ -171,6 +215,8 @@ protected Q_SLOTS:
 
     void on_delegate_showContextMenuRequest(const QPoint& pos);
     void on_delegate_selectionChanged(const QString&);
+    void on_delegate_markerUndoStatusChanged(const QString&);
+    void on_delegate_markerInitiated(const QString&);
     void on_delay_updateToolbar();
 
     void on_foreColor_changed();
@@ -181,6 +227,30 @@ protected Q_SLOTS:
     void applyBackColor(const QColor& color);
 
     void on_fontDailogFontChanged(const QFont & font);    
+    //
+    //
+    void on_btnPencil_clicked();
+    void on_btnPencilColor_changed();
+    void on_btnHighlighter_clicked();
+    void on_btnHighlighterColor_changed();
+    void on_btnEraser_clicked();
+    void on_btnShape_clicked();
+    void on_btnShapeColor_changed();
+    void on_btnUndo_clicked();
+    void on_btnRedo_clicked();
+    void on_btnGoback_clicked();
+    //
+    void on_btnUndoOutline_clicked();
+    void on_btnRedoOutline_clicked();
+    void on_btnIndentOutline_clicked();
+    void on_btnOutdentOutline_clicked();
+    void on_btnNotesOutline_clicked();
+    void on_btnCompleteOutline_clicked();
+    //
+    void on_pencilSize_activated(int);
+    void on_highlighterSize_activated(int);
+    void on_eraserSize_activated(int);
+    void on_shapeSize_activated(int);
 
 private:
     void queryCurrentFont(std::function<void(const QFont& font)> callback);
@@ -194,6 +264,7 @@ private:
 
     void moveWidgetFromSecondLineToFirstLine(QWidget* widget);
     void moveWidgetFromFristLineToSecondLine(QWidget* widget);
+
 };
 
 

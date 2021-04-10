@@ -25,6 +25,7 @@
 #include "WizNoteStyle.h"
 #include "WizTagListWidget.h"
 #include "WizCategoryView.h"
+#include "WizCombineNotesDialog.h"
 
 #include "sync/WizKMSync.h"
 
@@ -35,6 +36,7 @@
 #define WIZACTION_LIST_LOCATE   QObject::tr("Locate")
 #define WIZACTION_LIST_DELETE   QObject::tr("Delete")
 #define WIZACTION_LIST_TAGS     QObject::tr("Tags...")
+#define WIZACTION_LIST_COMBINE     QObject::tr("Combine notes...")
 #define WIZACTION_LIST_MOVE_DOCUMENT QObject::tr("Move to...")
 #define WIZACTION_LIST_COPY_DOCUMENT QObject::tr("Copy to...")
 #define WIZACTION_LIST_DOCUMENT_HISTORY QObject::tr("Version History...")
@@ -63,7 +65,6 @@ enum DocSize {
     _100MB = 100 * 1024 * 1024,
     _1GB = 1 * 1024 * 1024 * 1024
 };
-
 
 WizDocumentListView::WizDocumentListView(WizExplorerApp& app, QWidget *parent /*= 0*/)
     : QListWidget(parent)
@@ -105,16 +106,18 @@ WizDocumentListView::WizDocumentListView(WizExplorerApp& app, QWidget *parent /*
     setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_vScroll = new WizScrollBar(this);
     m_vScroll->syncWith(verticalScrollBar());
-    m_vScroll->applyStyle("#F5F5F5", "#C1C1C1", true);
+    if (isDarkMode()) {
+        //m_vScroll->applyStyle("#272727", QColor(Qt::transparent).name(), false);
+    } else {
+        //m_vScroll->applyStyle("#F5F5F5", QColor(Qt::transparent).name(), false);
+    }
 #endif
 
     // setup style
     QString strSkinName = m_app.userSettings().skin();
     setStyle(::WizGetStyle(strSkinName));
-
-    QPalette pal = palette();
-    pal.setColor(QPalette::Base, Utils::WizStyleHelper::listViewBackground());
-    setPalette(pal);
+    //
+    applyTheme();
 
     setCursor(QCursor(Qt::ArrowCursor));
     //
@@ -186,7 +189,7 @@ WizDocumentListView::WizDocumentListView(WizExplorerApp& app, QWidget *parent /*
     m_menuDocument->addAction(WIZACTION_LIST_TAGS, this,
                               SLOT(on_action_selectTags()));
     m_menuDocument->addSeparator();
-
+    //
     m_menuDocument->addAction(tr("Open in new Window"), this,
                               SLOT(on_action_showDocumentInFloatWindow()));
     m_menuDocument->addAction(WIZACTION_LIST_COPY_DOCUMENT_LINK, this,
@@ -218,6 +221,9 @@ WizDocumentListView::WizDocumentListView(WizExplorerApp& app, QWidget *parent /*
                               SLOT(on_action_encryptDocument()));
     m_menuDocument->addAction(WIZACTION_LIST_CANCEL_ENCRYPTION, this,
                               SLOT(on_action_cancelEncryption()));
+    //
+    m_menuDocument->addAction(WIZACTION_LIST_COMBINE, this,
+                              SLOT(on_action_combineNote()));
 
     m_menuDocument->addSeparator();
     QAction* actionDeleteDoc = m_menuDocument->addAction(WIZACTION_LIST_DELETE,
@@ -264,8 +270,15 @@ WizDocumentListView::WizDocumentListView(WizExplorerApp& app, QWidget *parent /*
 
 WizDocumentListView::~WizDocumentListView()
 {
+    disconnect();
 }
 
+void WizDocumentListView::applyTheme()
+{
+    QPalette pal = palette();
+    pal.setColor(QPalette::Base, Utils::WizStyleHelper::listViewBackground());
+    setPalette(pal);
+}
 void WizDocumentListView::resizeEvent(QResizeEvent* event)
 {
 #ifdef WIZNOTE_CUSTOM_SCROLLBAR
@@ -435,7 +448,11 @@ void WizDocumentListView::moveDocumentsToPersonalFolder(const CWizDocumentDataAr
 
 void WizDocumentListView::moveDocumentsToGroupFolder(const CWizDocumentDataArray& arrayDocument, const WIZTAGDATA& targetTag)
 {
-    WizDatabase& db = m_dbMgr.db();
+    if (arrayDocument.empty()) {
+        return;
+    }
+    WizDatabase& db = m_dbMgr.db(arrayDocument[0].strKbGUID);
+    //
     if (!WizAskUserCipherToOperateEncryptedNote(arrayDocument, db))
         return;
 
@@ -448,7 +465,11 @@ void WizDocumentListView::moveDocumentsToGroupFolder(const CWizDocumentDataArray
 void WizDocumentListView::copyDocumentsToPersonalFolder(const CWizDocumentDataArray& arrayDocument,
                                                         const QString& targetFolder, bool keepDocTime, bool keepTag)
 {
-    WizDatabase& db = m_dbMgr.db();
+    if (arrayDocument.empty()) {
+        return;
+    }
+    WizDatabase& db = m_dbMgr.db(arrayDocument[0].strKbGUID);
+    //
     if (!WizAskUserCipherToOperateEncryptedNote(arrayDocument, db))
         return;
 
@@ -462,7 +483,11 @@ void WizDocumentListView::copyDocumentsToPersonalFolder(const CWizDocumentDataAr
 void WizDocumentListView::copyDocumentsToGroupFolder(const CWizDocumentDataArray& arrayDocument,
                                                       const WIZTAGDATA& targetTag, bool keepDocTime)
 {
-    WizDatabase& db = m_dbMgr.db();
+    if (arrayDocument.empty()) {
+        return;
+    }
+    WizDatabase& db = m_dbMgr.db(arrayDocument[0].strKbGUID);
+    //
     if (!WizAskUserCipherToOperateEncryptedNote(arrayDocument, db))
         return;
 
@@ -867,6 +892,7 @@ void WizDocumentListView::resetPermission()
     bool bDeleted = isDocumentsWithDeleted(arrayDocument);
     bool bCanEdit = isDocumentsAllCanDelete(arrayDocument);
     bool bAlwaysOnTop = isDocumentsAlwaysOnTop(arrayDocument);
+    bool bMulti = arrayDocument.size() > 1;
 
     // if group documents or deleted documents selected
     if (bGroup || bDeleted) {
@@ -883,6 +909,8 @@ void WizDocumentListView::resetPermission()
     // disable delete if permission is not enough
     findAction(WIZACTION_LIST_DELETE)->setEnabled(bCanEdit);
 
+    findAction(WIZACTION_LIST_COMBINE)->setEnabled(bCanEdit && bMulti);
+
     findAction(WIZACTION_LIST_ALWAYS_ON_TOP)->setEnabled(bCanEdit);
     findAction(WIZACTION_LIST_ALWAYS_ON_TOP)->setChecked(bAlwaysOnTop);
 
@@ -893,7 +921,7 @@ void WizDocumentListView::resetPermission()
         findAction(WIZACTION_LIST_DOCUMENT_HISTORY)->setEnabled(false);
         //
         int num = numOfEncryptedDocuments(arrayDocument);
-        if (num == arrayDocument.size())
+        if (num == (int)arrayDocument.size())
         {
             setEncryptDocumentActionEnable(false);
         }
@@ -1078,7 +1106,7 @@ QString note2Mime(const CWizDocumentDataArray& arrayDocument)
     CString strMime;
     ::WizStringArrayToText(arrayGUID, strMime, ";");
 
-    return strMime;
+    return QString(strMime);
 }
 
 bool mime2Notes(const QString& mime, WizDatabaseManager& dbMgr, CWizDocumentDataArray& arrayDocument)
@@ -1144,8 +1172,8 @@ QPixmap CreateDocumentDragBadget(const CWizDocumentDataArray& arrayDocument)
 
         QRect rcIcon(rcItem.left(), rcItem.top() + (rcItem.height() - nIconHeight)/2,
                      nIconHeight, nIconHeight);
-        QPixmap pixIcon(Utils::WizStyleHelper::skinResourceFileName(
-                            doc.nProtected == 1 ? "document_badge_encrypted" : "document_badge", true));
+        QPixmap pixIcon(Utils::WizStyleHelper::loadPixmap(
+                            doc.nProtected == 1 ? "document_badge_encrypted" : "document_badge"));
         pt.drawPixmap(rcIcon, pixIcon);
 
         //
@@ -1165,7 +1193,7 @@ QPixmap CreateDocumentDragBadget(const CWizDocumentDataArray& arrayDocument)
     }
 
     //draw more
-    if (nItemCount < arrayDocument.size())
+    if (nItemCount < (int)arrayDocument.size())
     {
         rcItem.adjust(0, -nItemHeight / 2, 0, -nItemHeight / 2);
         QPen pen(QColor("#3177EE"));
@@ -1181,6 +1209,7 @@ QPixmap CreateDocumentDragBadget(const CWizDocumentDataArray& arrayDocument)
 
 QPixmap createDragImage(const QString& strMime, WizDatabaseManager& dbMgr, Qt::DropActions supportedActions)
 {
+    Q_UNUSED(supportedActions);
     CWizDocumentDataArray arrayDocument;
     if (!mime2Notes(strMime, dbMgr, arrayDocument))
         return QPixmap();
@@ -1770,7 +1799,10 @@ void WizDocumentListView::on_action_moveDocument()
     selector->setAcceptRoot(false);
 
     connect(selector, SIGNAL(finished(int)), SLOT(on_action_moveDocument_confirmed(int)));
-    selector->exec();
+    //
+    QTimer::singleShot(0, [=]() {
+        selector->exec();
+    });
 }
 
 void WizDocumentListView::on_action_moveDocument_confirmed(int result)
@@ -1834,7 +1866,10 @@ void WizDocumentListView::on_action_copyDocument()
     selector->setAcceptRoot(false);
 
     connect(selector, SIGNAL(finished(int)), SLOT(on_action_copyDocument_confirmed(int)));
-    selector->exec();
+    //
+    QTimer::singleShot(0, [=]() {
+        selector->exec();
+    });
 }
 
 void WizDocumentListView::on_action_copyDocument_confirmed(int result)
@@ -1921,6 +1956,8 @@ void WizDocumentListView::on_action_showDocumentInFloatWindow()
 {
     WizMainWindow::instance()->trySaveCurrentNote([=](const QVariant& vRet) {
         //
+        Q_UNUSED(vRet);
+        //
         ::WizGetAnalyzer().logAction("documentListMenuOpenInFloatWindow");
         WizMainWindow* mainWindow = qobject_cast<WizMainWindow*>(m_app.mainWindow());
         foreach(WizDocumentListViewDocumentItem* item, m_rightButtonFocusedItems)
@@ -1944,6 +1981,8 @@ void WizDocumentListView::on_action_encryptDocument()
 {
     WizMainWindow::instance()->trySaveCurrentNote([=](const QVariant& vRet) {
         //
+        Q_UNUSED(vRet);
+        //
         ::WizGetAnalyzer().logAction("documentListMenuEncryptDocument");
         foreach (WizDocumentListViewDocumentItem* item, m_rightButtonFocusedItems)
         {
@@ -1957,6 +1996,8 @@ void WizDocumentListView::on_action_encryptDocument()
 void WizDocumentListView::on_action_cancelEncryption()
 {
     WizMainWindow::instance()->trySaveCurrentNote([=](const QVariant& vRet) {
+        //
+        Q_UNUSED(vRet);
         //
         ::WizGetAnalyzer().logAction("documentListMenuCancelEncryptionn");
         //
@@ -1973,7 +2014,13 @@ void WizDocumentListView::on_action_cancelEncryption()
     });
 }
 
-
+void WizDocumentListView::on_action_combineNote()
+{
+    CWizDocumentDataArray documents;
+    getSelectedDocuments(documents);
+    WizCombineNotesDialog dialog(m_dbMgr, documents, NULL);
+    dialog.exec();
+}
 
 void WizDocumentListView::on_action_alwaysOnTop()
 {
@@ -2231,9 +2278,9 @@ void WizDocumentListView::drawItem(QPainter* p, const QStyleOptionViewItem* vopt
     if (WizDocumentListViewBaseItem* pItem = itemFromIndex(vopt->index))
     {
         p->save();
-        int nRightMargin = 12;
+        //int nRightMargin = WizSmartScaleUI(12);
         QStyleOptionViewItem newVopt(*vopt);
-        newVopt.rect.setRight(newVopt.rect.right() - nRightMargin);
+        //newVopt.rect.setRight(newVopt.rect.right() - nRightMargin);
         pItem->draw(p, &newVopt, viewType());
 
         p->restore();
@@ -2290,37 +2337,48 @@ void WizDocumentListView::setItemsNeedUpdate(const QString& strKbGUID, const QSt
 
 void WizDocumentListView::paintEvent(QPaintEvent *e)
 {
-    QListView::paintEvent(e);
-    if (model() && model()->rowCount(rootIndex()) > 0)
-       return;
+    if (model() && model()->rowCount(rootIndex()) > 0) {
+        //
+        QPainter p(viewport());
+        //
+        QRect rc = rect();
+        p.fillRect(rc, Utils::WizStyleHelper::listViewBackground());
+        //
+        QListView::paintEvent(e);
+        //
+        return;
+    }
+    //
     // The view is empty.
-
+    QListView::paintEvent(e);
+    //
     QPainter p(viewport());
     //
+    QRect rc = rect();
+    p.fillRect(rc, Utils::WizStyleHelper::listViewBackground());
+    //
     if (m_emptyFolder.isNull()) {
-        QString fileName = Utils::WizStyleHelper::skinResourceFileName("empty_folder", true);
-        m_emptyFolder = QPixmap(fileName);
+        m_emptyFolder = QPixmap(Utils::WizStyleHelper::loadPixmap("empty_folder"));
     }
     if (m_emptySearch.isNull()) {
-        QString fileName = Utils::WizStyleHelper::skinResourceFileName("empty_search", true);
-        m_emptySearch = QPixmap(fileName);
+        m_emptySearch = QPixmap(Utils::WizStyleHelper::loadPixmap("empty_search"));
     }
     //
     QPixmap pixmap = isSearchResult() ? m_emptySearch : m_emptyFolder;
     QSize imageSize = pixmap.size();
-    QRect rc = rect();
-    //
-    imageSize.setWidth(imageSize.width() / pixmap.devicePixelRatio());
-    imageSize.setHeight(imageSize.height() / pixmap.devicePixelRatio());
+#ifdef Q_OS_MAC
+    imageSize.setWidth(int(imageSize.width() / pixmap.devicePixelRatio()));
+    imageSize.setHeight(int(imageSize.height() / pixmap.devicePixelRatio()));
+#endif
     //
     QString text = isSearchResult()
             ? tr("No search results...\nTry to change another keyword or advanced searching")
             : tr("Nothing in here\nGo to create a note");
     //
-    int spacing = 10;
+    int spacing = WizSmartScaleUI(10);
     //
     QRect textRect = rc;
-    textRect.adjust(16, 0, -16, 0);
+    textRect.adjust(WizSmartScaleUI(16), 0, WizSmartScaleUI(-16), 0);
     QFontMetrics fm(p.font());
     int textHeight = fm.boundingRect(textRect, Qt::TextWordWrap, text).height();
     int totalHeight = imageSize.height() + textHeight + spacing;

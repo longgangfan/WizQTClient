@@ -11,6 +11,7 @@
 #include "utils/WizStyleHelper.h"
 #include "utils/WizLogger.h"
 #include "share/WizMisc.h"
+#include "share/WizUIBase.h"
 #include "share/WizDatabase.h"
 #include "share/WizDatabaseManager.h"
 #include "WizDef.h"
@@ -19,8 +20,8 @@
 #include "share/WizAnalyzer.h"
 
 const int TAGITEM_MARGIN = 16;
-const int TAGITEM_HEIGHT  = 16;
-const int TAGITEM_DELETEICONSIZE = 10;
+//const int TAGITEM_HEIGHT  = 16;
+const int TAGITEM_DELETEICONSIZE = 14;
 
 
 WizTagBar::WizTagBar(WizExplorerApp& app, QWidget *parent)
@@ -30,7 +31,7 @@ WizTagBar::WizTagBar(WizExplorerApp& app, QWidget *parent)
     , m_tagList(nullptr)
 {
     int nHeight = Utils::WizStyleHelper::tagBarHeight() - 4;
-    setFixedHeight(nHeight);
+    setFixedHeight(WizSmartScaleUI(nHeight));
 
 //    setStyleSheet("font-size: 11px; color: #646464;");
     setFocusPolicy(Qt::ClickFocus);
@@ -45,8 +46,11 @@ WizTagBar::WizTagBar(WizExplorerApp& app, QWidget *parent)
     QHBoxLayout* hLayout = new QHBoxLayout(this);
     hLayout->setContentsMargins(0, 0, 0, 0);
     hLayout->setSpacing(6);
+
+    QString strStyle;
+    strStyle += "font-size: " + QString::number(WizSmartScaleUI(12)) + "px; color: #A2A2A2;";
     m_label = new QLabel(tr("Tag"), this);
-    m_label->setStyleSheet("font-size:12px; color:#A2A2A2;");
+    m_label->setStyleSheet(strStyle);
     hLayout->addWidget(m_label);
     m_btnAdd = new QToolButton(this);
     hLayout->addWidget(m_btnAdd);
@@ -57,11 +61,10 @@ WizTagBar::WizTagBar(WizExplorerApp& app, QWidget *parent)
     m_btnMore->setVisible(false);
     m_lineEdit = new WizTagLineEdit(this);
     QFont f = m_lineEdit->font();
-    f.setPixelSize(12);
+    f.setPixelSize(WizSmartScaleUI(12));
     m_lineEdit->setFont(f);
     hLayout->addWidget(m_lineEdit);
     hLayout->addStretch();
-
     //
     m_tagLayout = new QHBoxLayout(m_tagWidget);
     m_tagLayout->setContentsMargins(0, 0, 0, 0);
@@ -450,6 +453,7 @@ void WizTagBar::on_documentTagModified(const WIZDOCUMENTDATA& document)
 
 void WizTagBar::on_lineEditTextChanged(const QString& text)
 {
+    Q_UNUSED(text);
 //    if (text.isEmpty())
 //    {
 //        m_lineEdit->setStyleSheet("QLineEdit {border: 0px; color:#6c6c6c;}");
@@ -517,6 +521,15 @@ void WizTagBar::applyStyleSheet()
     m_btnMore->setStyleSheet("QToolButton { border: 0px; margin-top:2px;}");
 }
 
+QIcon WizTagItem::m_iconDelete;
+#ifdef Q_OS_MAC
+const QSize DELETE_ICON_SIZE = QSize(WizSmartScaleUI(TAGITEM_DELETEICONSIZE), WizSmartScaleUI(TAGITEM_DELETEICONSIZE));
+#else
+QSize tagItemGetIconSize() {
+    return QSize(WizSmartScaleUI(TAGITEM_DELETEICONSIZE), WizSmartScaleUI(TAGITEM_DELETEICONSIZE));
+}
+#define DELETE_ICON_SIZE tagItemGetIconSize()
+#endif
 
 WizTagItem::WizTagItem(const QString guid, const QString text, QWidget* parent)
     : QWidget(parent)
@@ -526,21 +539,12 @@ WizTagItem::WizTagItem(const QString guid, const QString text, QWidget* parent)
     , m_selected(false)
     , m_closeButtonPressed(false)
     , m_menu(nullptr)
-    , m_pixDeleteNormal(nullptr)
-    , m_pixDeletePressed(nullptr)
 {
-    if (!m_pixDeleteNormal)
-    {        
-        QString deleteNormal = Utils::WizStyleHelper::skinResourceFileName("action_deleteEditorBarItem", true);
-        QString deletePressed = Utils::WizStyleHelper::skinResourceFileName("action_deleteEditorBarItem_on", true);
-        m_pixDeleteNormal = std::make_shared<QPixmap>(deleteNormal);
-        m_pixDeletePressed = std::make_shared<QPixmap>(deletePressed);
+    if (m_iconDelete.isNull()) {
+        WizIconOptions options(Qt::red, Qt::black, Qt::black);
+        m_iconDelete = WizLoadSkinIcon(Utils::WizStyleHelper::themeName(), "action_deleteEditorBarItem",
+                                       DELETE_ICON_SIZE, options);
     }
-
-//    QFont f;
-//    QFontMetrics fm(f);
-//    int nWidth = fm.width(m_text) + TAGITEM_MARGIN * 2;
-//    setFixedWidth(nWidth);
 }
 
 WizTagItem::~WizTagItem()
@@ -581,14 +585,16 @@ void WizTagItem::setSelected(bool b)
 QSize WizTagItem::sizeHint() const
 {
     QFont f;
+    f.setPixelSize(WizSmartScaleUI(11));
     QFontMetrics fm(f);
-    QSize sz(fm.width(m_tagName) + TAGITEM_MARGIN * 2, TAGITEM_HEIGHT);
+    QSize sz(fm.width(m_tagName) + TAGITEM_MARGIN * 2, fm.height() + WizSmartScaleUI(2));
     return sz;
 }
 
 int WizTagItem::textWidth(const QString text)
 {
     QFont f;
+    f.setPixelSize(WizSmartScaleUI(11));
     QFontMetrics fm(f);
     return fm.width(text) + TAGITEM_MARGIN * 2;
 }
@@ -597,31 +603,42 @@ void WizTagItem::paintEvent(QPaintEvent* event)
 {
     Q_UNUSED(event);
     QPainter pt(this);
-    QRect rcBorder(0, (height() - TAGITEM_HEIGHT) / 2, width(), TAGITEM_HEIGHT);
+    QRect rcBorder(0, (height() - sizeHint().height()) / 2, width(), sizeHint().height());
 
     pt.setPen(Qt::NoPen);
-    pt.setBrush(QBrush(QColor(m_selected ? "#535453" : "#B6B6B6")));
+    //
+    QColor background = isDarkMode() ? "#333333" : "#B6B6B6";
+    pt.setBrush(QBrush(QColor(m_selected ? "#535453" : background)));
     pt.setRenderHint(QPainter::Antialiasing, true);
     pt.drawRoundedRect(rcBorder, 8, 8);
-    pt.setPen(Qt::white);
+    if (isDarkMode()) {
+        pt.setPen(m_selected ? Qt::white : QColor("#e9e9e9"));
+    } else {
+        pt.setPen(Qt::white);
+    }
     QFont f = pt.font();
-    f.setPixelSize(11);
+    f.setPixelSize(WizSmartScaleUI(11));
     pt.setFont(f);
     pt.drawText(rcBorder, Qt::AlignCenter, m_tagName);
 
     if (!m_readOnly)
     {
+        QSize size = DELETE_ICON_SIZE;
+        QPixmap pix;
         if (m_selected && !m_closeButtonPressed)
         {
-            QRect rcDel(rcBorder.right() - TAGITEM_DELETEICONSIZE - 2, (height() - TAGITEM_DELETEICONSIZE) / 2, TAGITEM_DELETEICONSIZE,
-                        TAGITEM_DELETEICONSIZE);
-            pt.drawPixmap(rcDel, m_pixDeleteNormal.operator *());
+            pix = m_iconDelete.pixmap(size, QIcon::Normal);
         }
         else if (m_closeButtonPressed)
         {
-            QRect rcDel(rcBorder.right() - TAGITEM_DELETEICONSIZE - 2, (height() - TAGITEM_DELETEICONSIZE) / 2, TAGITEM_DELETEICONSIZE,
-                        TAGITEM_DELETEICONSIZE);
-            pt.drawPixmap(rcDel, m_pixDeletePressed.operator *());
+            pix = m_iconDelete.pixmap(size, QIcon::Active);
+        }
+        QRect rcDel(rcBorder.right() - size.width() - 2, (height() - size.height()) / 2, size.width(),
+                    size.height());
+        //
+        if (!pix.isNull())
+        {
+            pt.drawPixmap(rcDel, pix);
         }
     }
 }
